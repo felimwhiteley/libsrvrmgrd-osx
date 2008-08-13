@@ -3,7 +3,7 @@
 # Copyright 2008 Integral Arm - http://www.integralarm.com/ 
 # by Felim Whiteley - http://www.linkedin.com/in/felimwhiteley
 # felimwhiteley -AT- gmail [DOT] com
-# Original code developed by Dre from http://www.dreness.com/
+# Original code developed by Andre LaBranche from http://www.dreness.com/
 # Version 0.4.0 - Works With Panther, Tiger and Leopard
 # (Other Version may also work but have not been tested)
 #
