@@ -4,7 +4,7 @@
 # by Felim Whiteley - http://www.linkedin.com/in/felimwhiteley
 # felimwhiteley -AT- gmail [DOT] com
 # Original code developed by Andre LaBranche from http://www.dreness.com/
-# Version 0.4.0 - Works With Panther, Tiger and Leopard
+# Version 0.5.0 - Works With Panther, Tiger and Leopard
 # (Other Version may also work but have not been tested)
 #
 # ------------------------------------------------------------------------- 
@@ -55,30 +55,55 @@ import pickle
 # e.g. "v1+v2" Use the servermgrd web interface to
 # discover these; https://your.server:311
 # ** timescale defines how many data samples to return (when applicable)
-def buildXML ( command, variant, timescale ) :
-  request = """<?xml version="1.0" encoding="UTF-8"?>
+
+def buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None ) :
+	request = """<?xml version="1.0" encoding="UTF-8"?>
 <plist version="0.9">
 <dict>
 	<key>command</key>
 	<string>"""
-  request = request + command
-  request = request + '</string>'
-  if timescale != '' :
-    request = request + """
+	request = request + command
+	request = request + '</string>'
+	
+	if identifier :
+		request = request + """
+	<key>identifier</key>
+	<string>"""
+		request = request + identifier
+		request = request + '</string>'
+	
+	if offset :
+		request = request + """
+	<key>offset</key>
+	<integer>"""
+		request = request + offset
+		request = request + '</integer>'
+	
+	if amount :
+		request = request + """
+	<key>amount</key>
+	<integer>"""
+		request = request + amount
+		request = request + '</integer>'
+	
+	if timescale not in (None, ''):
+		request = request + """
 	<key>timeScale</key>
 	<integer>"""
-    request = request + timescale
-    request = request + '</integer>'
-  if variant != '' :
-    request = request + """
+		request = request + timescale
+		request = request + '</integer>'
+	
+	if variant not in (None, ''):
+		request = request + """
 	<key>variant</key>
 	<string>"""
-    request = request + variant
-    request = request + '</string>'
-  request = request + """
+		request = request + variant
+		request = request + '</string>'
+	
+	request = request + """
 </dict>
 </plist>"""
-  return request
+	return request
 
 # This code enables a connection to the server via BASIC AUTH over https
 # The user must be an admin on the Mac Server
