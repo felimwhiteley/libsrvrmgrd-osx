@@ -1,0 +1,189 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# We require the srvrmgrdIO module to prepare the request and talk to servermgrd
+# Also require python plistlib library (apt-get install python-plistlib [in Debian/Ubuntu])
+# http://svn.python.org/projects/python/trunk/Lib/plistlib.py
+#
+#
+#    Copyright (C) 2010 Felim Whiteley
+#
+#    Author: Felim Whiteley <felimwhiteley@gmail.com>
+#             http://www.linkedin.com/in/felimwhiteley
+#
+#    This is free software; you can redistribute it and/or modify it
+#    under the terms of the GNU Lesser General Public License as
+#    published by the Free Software Foundation; version 3 of
+#    the License, or any later version.
+#
+#    This software is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#    Lesser General Public License for more details.
+#
+#    You should have received a copy of the GNU Lesser General Public
+#    License along with this software; if not, write to the Free
+#    Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+#    02110-1301 USA, or see the FSF site: http://www.fsf.org.
+
+
+import pickle, srvrmgrdIO, sys, time
+
+osxServices = {
+	'afp': ['currentConnections'],
+	'dhcp': ['numDHCPLeases', 'numConfiguredStaticMaps', 'timeOfSnapShot', 'numActiveStaticMaps'],
+	'dirserv': ['timState', 'ldapdState', 'kdcStatus', 'lookupdState', 'passwordServiceState', 'netinfodState', 'netinfodParentState'],
+	'dns': ['zonesAllocated', 'SOAQueriesInProgress', 'transfersRunning', 'transfersDeferred'],
+	'ftp': ['realConnectionCount', 'anonymousAccessPermitted', 'anonymousConnectionCount'],
+	'jabber': ['serviceMode', 'jabberdState', 'mucState', 'proxyState'],
+	'mysql': ['currentConnections', 'currentThroughput'],
+	'nat': ['activeICMP', 'activeTCP', 'activeUDP'],
+	'netboot': [],
+	'nfs': ['nsfd', 'mountd', 'portmap', 'rpc.lockd'],
+	'print': ['currentJobs', 'currentQueues'],
+	'qtss': ['stateAFP', 'stateDHCP', 'stateHTTP', 'stateNFS', 'stateTFTP'],
+	'smb': ['currentConnections'],
+	'swupdate': ['numOfMirroredPkg', 'numOfEnbabledPkg'],
+	'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests']
+}
+
+if len(sys.argv) >= 6:
+	checkService = sys.argv[1]
+	serverAddress = sys.argv[2]
+	serverPort = sys.argv[3]
+	serverUser = sys.argv[4]
+	serverPassword = sys.argv[5]
+else:
+	print "OS X Server Monitoring Tool"
+	print "\tCopyright (C) 2010 Felim Whiteley"
+	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
+	print "This software is licensed under the GNU Lesser General Public License\n"
+	print "USAGE: check_osx_server SERVICENAME ADDRESS PORT USER PASSWORD [Optional Sub-Service Ignore List]"
+	print "\t--------\t------------"
+	print "\tServices\tSub-Services"
+	print "\t--------\t------------"
+	for serviceName, subServiceList in osxServices.iteritems():
+		if len(serviceName) > 7:
+			txtTabs = "\t"
+		else:
+			txtTabs = "\t\t"
+		print "\t%s%s%s" % (serviceName, txtTabs, subServiceList)
+	print "\nWhen adding Sub-Service ignore values they should be the last argument, seperated by commas and contain no whitespace"
+	print "\nEXAMPLE: check_osx_server jabber 172.16.12.1 311 srvadmin srvpassword mucState,proxyState\n"
+	print "\tmucState & proxyState will be ignored and will not trigger a warning\n"
+	sys.exit(0)
+
+# Ignore List For subServices
+if len(sys.argv) > 6:
+	subServiceIgnoreCSV = sys.argv[6]
+	subServiceIgnore = subServiceIgnoreCSV.split(',')
+else:
+	subServiceIgnore = []
+
+debugMode = 0
+warningCount = 0
+criticalCount = 0
+
+def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataReqTimescale=None, dataReqIdentifier=None, dataReqOffset=None, dataReqAmount=None):
+	# buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None )
+	dataRequest = srvrmgrdIO.buildXML(dataReqCommand, dataReqVariant, dataReqTimescale, dataReqIdentifier, dataReqOffset, dataReqAmount)
+	dataFileLocation = srvrmgrdIO.buildDataFile(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword)
+	dataFile = open(dataFileLocation, "rb")
+	serviceData = pickle.load(dataFile)
+	dataFile.close()
+	return serviceData
+
+def getServiceState(serviceData):
+	# Set some intial values
+	serviceStatus = ""
+	criticalCount = 0
+	serviceState = serviceData['state']
+	if 'state' in serviceData:
+		if serviceState == 'RUNNING':
+			serviceStatus = "%s" % (serviceState)
+		else :
+				criticalCount += 1
+				serviceStatus = "%s" % (serviceState)
+	else:
+		serviceStatus = "UNKNOWN: Invalid Data Returned From Service Check"
+		criticalCount += 1
+	return serviceStatus, criticalCount
+
+def getSubServiceState(subServices, serviceData, subServiceIgnore):
+	warningCount = 0
+	subServiceStatus = ""
+	for subService in subServices:
+		if subService in serviceData:
+			subServiceState = serviceData[subService]
+			subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
+			if subService not in subServiceIgnore:
+				if not str(subServiceState).isdigit():
+					if subServiceState.upper() in ('STOPPED', 'OFF'):
+						warningCount += 1
+	return subServiceStatus, warningCount
+
+# Process The Service
+if checkService in ('afpUserList', 'smbUserList'):
+	dataReqCommand = 'getConnectedUsers'
+	serviceData = getServiceData('servermgr_%s' % (checkService[:3]), dataReqCommand, 'withDetails')
+	serviceStatus, criticalCount = getServiceState(serviceData)
+	if not criticalCount:
+		userCount = 0
+		userList = "%s Connections Active\n" % (checkService[:3].upper())
+		for userConnection in serviceData['usersArray'] :
+			userCount += 1
+			userList = "%s\t%s:\t%s\n" % (userList, userConnection['ipAddress'], userConnection['name'])
+		if userCount:
+			print userList
+		serviceStatus = "Connections:%s" % (userCount)
+elif checkService == "mail":
+	serviceData = getServiceData('servermgr_mail', 'getState', 'withDetails')
+	serviceStatus, criticalCount = getServiceState(serviceData)
+	if not criticalCount:
+		serviceStatus = "%s " % (serviceStatus) # Keep Initial RUNNING
+		# Example Of Data Returned
+		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'SMTP'}
+		# {'active': 0, 'status': 'OFF', 'kind': 'OUTGOING', 'total': 0, 'protocol': 'SMTP'}
+		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'POP3'}
+		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'IMAP'}
+		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'LISTSERVER'}
+		for protocol in serviceData['protocolsArray']:
+			name = protocol['protocol']
+			kind = protocol['kind']
+			total = protocol['total']
+			active = protocol['active']
+			status = protocol['status']
+			if status == 'ON' :
+				serviceStatus = "%s%s-%s:Act(%s)Total(%s) " % (serviceStatus, name, kind, active, total)
+			else :
+				serviceStatus = "%s%s-%s:(%s) " % (serviceStatus, name, kind, status)
+elif checkService in osxServices:
+	serviceData = getServiceData('servermgr_%s' % checkService, 'getState', 'withDetails')
+	serviceStatus, criticalCount = getServiceState(serviceData)
+	subServices = osxServices[checkService]
+	if not criticalCount:
+		# Not All Services Have Sub-Services
+		if len(subServices) > 0:
+			subServiceStatus, warningCount = getSubServiceState(subServices, serviceData, subServiceIgnore)
+			# Some services have sub-services that are not always there
+			# if they are there then return the sub-services-status instead
+			if subServiceStatus not in (None, ''):
+				serviceStatus = subServiceStatus
+else:
+	criticalCount = 1
+	serviceStatus = "ERROR:Unknown command '%s'" % (checkService)
+
+# If In Debug Mode Print Out The Returned Dictionary So Can Check Values etc.
+if debugMode:
+	print serviceData
+# End Checks Print Status Message And Exit With Correct Exit Code
+# Nagios Return Codes
+# 0 - OK
+# 1 - Warning
+# 2 - Critical
+print serviceStatus
+if criticalCount:
+        sys.exit(2)
+elif warningCount:
+	sys.exit(1)
+else :
+        sys.exit(0)
