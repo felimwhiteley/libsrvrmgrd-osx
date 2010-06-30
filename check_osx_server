@@ -124,6 +124,7 @@ def getSubServiceState(subServices, serviceData, subServiceIgnore):
 # Process The Service
 if checkService in ('afpUserList', 'smbUserList'):
 	dataReqCommand = 'getConnectedUsers'
+	# Strip First 3 Characters To Run Against Correct OSX Module
 	serviceData = getServiceData('servermgr_%s' % (checkService[:3]), dataReqCommand, 'withDetails')
 	serviceStatus, criticalCount = getServiceState(serviceData)
 	if not criticalCount:

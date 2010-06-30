@@ -1,14 +1,14 @@
 #!/usr/bin/python
 #
-# Copyright 2008 Integral Arm - http://www.integralarm.com/ 
+# Copyright 2008 Integral Arm - http://www.integralarm.com/
 # by Felim Whiteley - http://www.linkedin.com/in/felimwhiteley
 # felimwhiteley -AT- gmail [DOT] com
 # Original code developed by Andre LaBranche from http://www.dreness.com/
 # Version 0.5.0 - Works With Panther, Tiger and Leopard
 # (Other Version may also work but have not been tested)
 #
-# ------------------------------------------------------------------------- 
-# 
+# -------------------------------------------------------------------------
+#
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Lesser General Public License as
 # published by the Free Software Foundation; either version 2.1 of
@@ -56,7 +56,7 @@ import pickle
 # discover these; https://your.server:311
 # ** timescale defines how many data samples to return (when applicable)
 
-def buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None ) :
+def buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None, state=None ) :
 	request = """<?xml version="1.0" encoding="UTF-8"?>
 <plist version="0.9">
 <dict>
@@ -64,42 +64,49 @@ def buildXML ( command, variant=None, timescale=None, identifier=None, offset=No
 	<string>"""
 	request = request + command
 	request = request + '</string>'
-	
+
 	if identifier :
 		request = request + """
 	<key>identifier</key>
 	<string>"""
 		request = request + identifier
 		request = request + '</string>'
-	
+
 	if offset :
 		request = request + """
 	<key>offset</key>
 	<integer>"""
 		request = request + offset
 		request = request + '</integer>'
-	
+
 	if amount :
 		request = request + """
 	<key>amount</key>
 	<integer>"""
 		request = request + amount
 		request = request + '</integer>'
-	
+
 	if timescale not in (None, ''):
 		request = request + """
 	<key>timeScale</key>
 	<integer>"""
 		request = request + timescale
 		request = request + '</integer>'
-	
+
 	if variant not in (None, ''):
 		request = request + """
 	<key>variant</key>
 	<string>"""
 		request = request + variant
 		request = request + '</string>'
-	
+
+	if state not in (None, ''):
+		request = request + """
+	<key>state</key>
+	<string>"""
+		request = request + state
+		request = request + '</string>'
+
 	request = request + """
 </dict>
 </plist>"""
@@ -141,13 +148,17 @@ def sendXML ( servermgrdModule, request, server, port, webuser, webpass ) :
 	xmlFauxFile = StringIO.StringIO(xmlresult)
 	return plistlib.Plist.fromFile(xmlFauxFile)
 
+def getServerDataFilename(server, port, servermgrdModule, command):
+	serverDataFile = "/tmp/%s_%s_%s_%s.dat" % (server, port, servermgrdModule, command)
+	return serverDataFile
+
 def buildDataFile ( servermgrdModule, request, server, port, webuser, webpass ) :
   	now = time.time()
 	request_strip = plistlib.Plist.fromFile(StringIO.StringIO(request))
 	command = ""
 	for item in request_strip['command'] :
         	command = command + item
-	ServerDataFile = "/tmp/" + server + "_" + servermgrdModule + "_" + command + ".dat"
+	ServerDataFile = getServerDataFilename(server, port, servermgrdModule, command)
 	if os.path.exists(ServerDataFile) :
 		filemodtime = os.path.getmtime(ServerDataFile)
         	differance = now - filemodtime
