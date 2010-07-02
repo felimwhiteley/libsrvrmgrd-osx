@@ -30,21 +30,44 @@ import pickle, srvrmgrdIO, sys, time
 
 osxServices = {
 	'afp': ['currentConnections'],
+	'calendar': [],
 	'dhcp': ['numDHCPLeases', 'numConfiguredStaticMaps', 'timeOfSnapShot', 'numActiveStaticMaps'],
 	'dirserv': ['timState', 'ldapdState', 'kdcStatus', 'lookupdState', 'passwordServiceState', 'netinfodState', 'netinfodParentState'],
 	'dns': ['zonesAllocated', 'SOAQueriesInProgress', 'transfersRunning', 'transfersDeferred'],
 	'ftp': ['realConnectionCount', 'anonymousAccessPermitted', 'anonymousConnectionCount'],
+	'ipfilter': [],
 	'jabber': ['serviceMode', 'jabberdState', 'mucState', 'proxyState'],
 	'mysql': ['currentConnections', 'currentThroughput'],
 	'nat': ['activeICMP', 'activeTCP', 'activeUDP'],
 	'netboot': [],
 	'nfs': ['nsfd', 'mountd', 'portmap', 'rpc.lockd'],
+	'pcast': ['onlineCameras', 'totalCameras', 'currentJobs', 'totalJobs'],
 	'print': ['currentJobs', 'currentQueues'],
 	'qtss': ['stateAFP', 'stateDHCP', 'stateHTTP', 'stateNFS', 'stateTFTP'],
+	'radius': [],
 	'smb': ['currentConnections'],
 	'swupdate': ['numOfMirroredPkg', 'numOfEnbabledPkg'],
-	'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests']
+	'teams': [],
+	'vpn': [],
+	'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests'],
+	'webobjects': [],
+	'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']}
 }
+
+def convertListToCsv(pythonList, sqlMode=0):
+        csvString = ''
+        for listItem in pythonList:
+                if csvString == '':
+			if sqlMode:
+				csvString = "'%s'" % listItem
+			else:
+				csvString = "%s" % listItem
+                else:
+			if sqlMode:
+				csvString = "%s,'%s'" % (csvString, listItem)
+			else:
+				csvString = "%s,%s" % (csvString, listItem)
+        return csvString
 
 if len(sys.argv) >= 6:
 	checkService = sys.argv[1]
@@ -66,10 +89,27 @@ else:
 			txtTabs = "\t"
 		else:
 			txtTabs = "\t\t"
-		print "\t%s%s%s" % (serviceName, txtTabs, subServiceList)
+		if isinstance(subServiceList, dict):
+			print "\t%s%s%s" % (serviceName, txtTabs, convertListToCsv(subServiceList.keys()))
+		elif len(subServiceList) == 0:
+			noSubServices = "--NO SUB-SERVICES AVAILABLE--"
+			print "\t%s%s%s" % (serviceName, txtTabs, noSubServices)
+		else:
+			print "\t%s%s%s" % (serviceName, txtTabs, convertListToCsv(subServiceList))
+	print "\tsoftwareupdates\t--NO SUB-SERVICES AVAILABLE--"
 	print "\nWhen adding Sub-Service ignore values they should be the last argument, seperated by commas and contain no whitespace"
 	print "\nEXAMPLE: check_osx_server jabber 172.16.12.1 311 srvadmin srvpassword mucState,proxyState\n"
 	print "\tmucState & proxyState will be ignored and will not trigger a warning\n"
+	print "------------------"
+	print "Informational Mode"
+	print "------------------"
+	print "USAGE: check_osx_server INFOMODE ADDRESS PORT USER PASSWORD"
+	print "\nINFOMODES:"
+	print "\tafpUserList\t\tView User(s) Connected Via AFP"
+	print "\tsmbUserList\t\tView User(s) Connected Via SMB"
+	print "\tserverRole\t\tList The Roles & Service Configured"
+	print "\tsoftwareupdatesList\tList All Updates Required By The Server"
+	print ""
 	sys.exit(0)
 
 # Ignore List For subServices
@@ -82,6 +122,7 @@ else:
 debugMode = 0
 warningCount = 0
 criticalCount = 0
+unknownCount = 0
 
 def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataReqTimescale=None, dataReqIdentifier=None, dataReqOffset=None, dataReqAmount=None):
 	# buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None )
@@ -111,14 +152,37 @@ def getServiceState(serviceData):
 def getSubServiceState(subServices, serviceData, subServiceIgnore):
 	warningCount = 0
 	subServiceStatus = ""
-	for subService in subServices:
-		if subService in serviceData:
-			subServiceState = serviceData[subService]
-			subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
-			if subService not in subServiceIgnore:
-				if not str(subServiceState).isdigit():
-					if subServiceState.upper() in ('STOPPED', 'OFF'):
-						warningCount += 1
+	# Some Services Use Sub-Arrays Within The PList - We need to had a Sub-SubService
+	# Effectivly: This is rather ugly and should really change this!
+	if isinstance(subServices, dict):
+		for subServiceName, subServiceArray in subServices.iteritems():
+			if subServiceName in serviceData:
+				subServiceInfo = ''
+				for subServiceItem in subServiceArray:
+					if subServiceItem in serviceData[subServiceName].keys():
+						subServiceState = serviceData[subServiceName][subServiceItem]
+						if subServiceInfo == '':
+							subServiceInfo = "[%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
+						else:
+							subServiceInfo = "%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
+						if subServiceName not in subServiceIgnore:
+							# Need to strip out possible float values - This is very hackish
+							if not str(subServiceState).replace('.', '').isdigit():
+								if subServiceState.upper() in ('UNAVAILABLE', 'STOPPED', 'OFF'):
+									warningCount += 1
+				if subServiceInfo != '':
+					subServiceStatus = "%s%s:%s] " % (subServiceStatus, subServiceName, subServiceInfo.rstrip())
+	# Normal Sub-Services
+	else:
+		for subService in subServices:
+			if subService in serviceData:
+				subServiceState = serviceData[subService]
+				subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
+				if subService not in subServiceIgnore:
+					# Need to strip out possible float values - This is very hackish
+					if not str(subServiceState).replace('.', '').isdigit():
+						if subServiceState.upper() in ('STOPPED', 'OFF'):
+							warningCount += 1
 	return subServiceStatus, warningCount
 
 # Process The Service
@@ -157,6 +221,51 @@ elif checkService == "mail":
 				serviceStatus = "%s%s-%s:Act(%s)Total(%s) " % (serviceStatus, name, kind, active, total)
 			else :
 				serviceStatus = "%s%s-%s:(%s) " % (serviceStatus, name, kind, status)
+elif checkService in ("softwareupdates", "softwareupdatesList"):
+	patchList = []
+	serviceData = getServiceData('servermgr_info', 'getSWUpdateStatus')
+	if 'swupdateStatus' in serviceData:
+		if 'phaseResultsArray' in serviceData['swupdateStatus']:
+			normalPatches = 0
+			recommendedPatches = 0
+			restartRequired = 0
+			for softwareUpdate in serviceData['swupdateStatus']['phaseResultsArray']:
+				if softwareUpdate['ignored']: # ie. Ignored Is True - Meaning Don't Ignore!
+					normalPatches += 1
+					warningCount += 1
+				else:
+					recommendedPatches += 1
+					criticalCount += 1
+				if softwareUpdate['restartRequired'] == 'YES':
+					restartRequired += 1
+				patchList.append({'swPatch': softwareUpdate['ignoreKey'], 'patchName': softwareUpdate['name'], 'sizeInKB': softwareUpdate['sizeInKB'], 'restartRequired':softwareUpdate['restartRequired'], 'productKey': softwareUpdate['productKey']})
+		serviceStatus = "totalPatches:%s" % (normalPatches + recommendedPatches)
+		if recommendedPatches:
+			serviceStatus = "%s recommendedPatches:%s" % (serviceStatus, recommendedPatches)
+		if restartRequired:
+			serviceStatus = "%s restartRequired" % (serviceStatus)
+		if checkService == 'softwareupdatesList':
+			for swPatch in patchList:
+				restartStatus = ""
+				if swPatch['restartRequired'] == 'YES':
+					restartStatus = " : [RESTART]"
+				print "%s : %skB : [%s]%s" % (swPatch['swPatch'], swPatch['sizeInKB'], swPatch['productKey'], restartStatus)
+	else:
+		unknownCount += 1
+elif checkService == "serverRole":
+	serviceData = getServiceData('servermgr_info', 'getState', 'withDetails')
+	if 'serviceConfig' in serviceData:
+		if 'roles' in serviceData['serviceConfig']:
+			serviceStatus = "Server Role(s):\n"
+			for serverRole, serverRoleStatus in serviceData['serviceConfig']['roles'].iteritems():
+				if serverRoleStatus['configured']:
+					serviceStatus = "%s\t%s\n" % (serviceStatus, serverRole)
+		if 'services' in serviceData['serviceConfig']:
+			serviceStatus = "%sActive Services:\n" % (serviceStatus)
+			for serviceName, serviceNameStatus in serviceData['serviceConfig']['services'].iteritems():
+				if serviceNameStatus['configured']:
+					serviceStatus = "%s\t%s\n" % (serviceStatus, serviceName)
+	serviceStatus.rstrip('\n')
 elif checkService in osxServices:
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getState', 'withDetails')
 	serviceStatus, criticalCount = getServiceState(serviceData)
@@ -170,7 +279,7 @@ elif checkService in osxServices:
 			if subServiceStatus not in (None, ''):
 				serviceStatus = subServiceStatus
 else:
-	criticalCount = 1
+	unknownCount = 1
 	serviceStatus = "ERROR:Unknown command '%s'" % (checkService)
 
 # If In Debug Mode Print Out The Returned Dictionary So Can Check Values etc.
@@ -181,8 +290,16 @@ if debugMode:
 # 0 - OK
 # 1 - Warning
 # 2 - Critical
+# 3 - Unknown (Invalid command line arguments were supplied to the plugin or
+#              low-level failures internal to the plugin (such as unable to
+#              fork, or open a tcp socket) that prevent it from performing the
+#              specified operation. Higher-level errors (such as name resolution
+#              errors, socket timeouts, etc) are outside of the control of
+#              plugins and should generally NOT be reported as UNKNOWN states.)
 print serviceStatus
-if criticalCount:
+if unknownCount:
+        sys.exit(3)
+elif criticalCount:
         sys.exit(2)
 elif warningCount:
 	sys.exit(1)
