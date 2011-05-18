@@ -4,7 +4,7 @@
 # by Felim Whiteley - http://www.linkedin.com/in/felimwhiteley
 # felimwhiteley -AT- gmail [DOT] com
 # Original code developed by Andre LaBranche from http://www.dreness.com/
-# Version 0.5.0 - Works With Panther, Tiger and Leopard
+# Version 0.6.2 - Works With Panther, Tiger and Leopard
 # (Other Version may also work but have not been tested)
 #
 # -------------------------------------------------------------------------
@@ -142,7 +142,7 @@ def requestServerData(url, webuser = None, webpass = None):
 		print e.headers
 		sys.exit(2)
 
-def sendXML ( servermgrdModule, request, server, port, webuser, webpass ) :
+def sendXML(servermgrdModule, request, server, port, webuser, webpass):
   	url = 'https://'+server+':'+port+'/commands/'+servermgrdModule+'?input='+urllib.quote(request)
 	xmlresult = requestServerData(url, webuser, webpass)
 	xmlFauxFile = StringIO.StringIO(xmlresult)
@@ -152,7 +152,15 @@ def getServerDataFilename(server, port, servermgrdModule, command):
 	serverDataFile = "/tmp/%s_%s_%s_%s.dat" % (server, port, servermgrdModule, command)
 	return serverDataFile
 
-def buildDataFile ( servermgrdModule, request, server, port, webuser, webpass ) :
+def logMessage(serverMessage, serverAddress, serverPort):
+	logFileLocation = "/tmp/%s_%s.debug" % (serverAddress, serverPort)
+	logFile = open( logFileLocation, "a" )
+	#print "%s: %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), serverMessage)
+	logFile.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), serverMessage))
+	logFile.flush()
+	logFile.close()
+
+def buildDataFile(servermgrdModule, request, server, port, webuser, webpass, debugMode):
   	now = time.time()
 	request_strip = plistlib.Plist.fromFile(StringIO.StringIO(request))
 	command = ""
@@ -160,11 +168,20 @@ def buildDataFile ( servermgrdModule, request, server, port, webuser, webpass ) 
         	command = command + item
 	ServerDataFile = getServerDataFilename(server, port, servermgrdModule, command)
 	if os.path.exists(ServerDataFile) :
+		if debugMode:
+			serverMessage = " DEBUG: DataFile Already Exists"
+			logMessage(serverMessage, server, port)
 		filemodtime = os.path.getmtime(ServerDataFile)
         	differance = now - filemodtime
         	if differance > 300 :
+			if debugMode:
+				serverMessage = " DEBUG: DataFile Over 300 Seconds Old -> Getting Fresh Data"
+				logMessage(serverMessage, server, port)
 			createNewDataFile(ServerDataFile, servermgrdModule, request, server, port, webuser, webpass)
 	else :
+		if debugMode:
+			serverMessage = " DEBUG: DataFile Does Not Exist -> Getting Data"
+			logMessage(serverMessage, server, port)
 		createNewDataFile(ServerDataFile, servermgrdModule, request, server, port, webuser, webpass)
 	return ServerDataFile
 

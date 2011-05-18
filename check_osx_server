@@ -1,14 +1,17 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # We require the srvrmgrdIO module to prepare the request and talk to servermgrd
 # Also require python plistlib library (apt-get install python-plistlib [in Debian/Ubuntu])
 # http://svn.python.org/projects/python/trunk/Lib/plistlib.py
 #
 #
-#    Copyright (C) 2010 Felim Whiteley
+#    Copyright (C) 2010 - 2011 Felim Whiteley
 #
 #    Author: Felim Whiteley <felimwhiteley@gmail.com>
 #             http://www.linkedin.com/in/felimwhiteley
+#	      http://whiteleytech.ie
+#
+#    Version: 0.6.2
 #
 #    This is free software; you can redistribute it and/or modify it
 #    under the terms of the GNU Lesser General Public License as
@@ -26,8 +29,39 @@
 #    02110-1301 USA, or see the FSF site: http://www.fsf.org.
 
 
-import pickle, srvrmgrdIO, sys, time
+import pickle, srvrmgrdIO, subprocess, sys, time
 
+configINI = '/etc/libServerManagerDaemon.ini'
+
+# Default to NOT using datafile in /tmp for shareable data;
+# If set config file then check set value for dataFileMode
+dataFileMode = 0
+# Default To Hiding SubService Results When Ignored
+showDisabledSubServices = 0
+
+# Debug Logging
+def logMessage(serverMessage, serverAddress, serverPort):
+	try:
+		logFileLocation = "/tmp/%s_%s.debug" % (serverAddress, serverPort)
+		logFile = open(logFileLocation, "a")
+		#print "%s: %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), serverMessage)
+		logFile.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), serverMessage))
+		logFile.flush()
+		logFile.close()
+	except:
+		print "DEBUG_LOG_ERROR: %s" % (sys.exc_info()[1])
+
+# CLI Debug Switch
+debugMode = 0
+testMode = 0
+if len(sys.argv) > 1:
+	if sys.argv[1] == "DEBUG":
+		debugMode = 1
+	elif sys.argv[1] == "TEST":
+		testMode = 1
+		debugMode = 1
+
+# Module Configuration
 osxServices = {
 	'afp': ['currentConnections'],
 	'calendar': [],
@@ -69,15 +103,58 @@ def convertListToCsv(pythonList, sqlMode=0):
 				csvString = "%s,%s" % (csvString, listItem)
         return csvString
 
+# Load Config File If Available
+configDebugMessage = ''
+try:
+	import ConfigParser
+	config = ConfigParser.ConfigParser()
+	config.readfp(open(configINI))
+	try:
+		dataFileMode = int(config.get("config", "dataFileMode"))
+	except:
+		pass
+	try:
+		showDisabledSubServices = int(config.get("config", "showDisabledSubServices"))
+	except:
+		pass
+	configDebugMessage = "DEBUG: %s Found: dataFileMode:%s" % (configINI, dataFileMode)
+except:
+	configDebugMessage = "ERROR: %s Not Found Or Invalid" % (configINI)
+
 if len(sys.argv) >= 6:
-	checkService = sys.argv[1]
-	serverAddress = sys.argv[2]
-	serverPort = sys.argv[3]
-	serverUser = sys.argv[4]
-	serverPassword = sys.argv[5]
+	# If We Are Running In Debug Then Shift The Position Of All Variables
+	checkService = sys.argv[1 + debugMode]
+	serverAddress = sys.argv[2 + debugMode]
+	serverPort = sys.argv[3 + debugMode]
+	serverUser = sys.argv[4 + debugMode]
+	serverPassword = sys.argv[5 + debugMode]
+	# Ignore List For subServices
+	if len(sys.argv) > (6 + debugMode):
+		subServiceIgnoreCSV = sys.argv[6 + debugMode]
+		subServiceIgnore = subServiceIgnoreCSV.split(',')
+	else:
+		subServiceIgnore = []
+	if debugMode:
+		if configDebugMessage:
+			# Send Config Parse Message to Log
+			logMessage(configDebugMessage, serverAddress, serverPort)
+		try:
+			# Send System Args To Log
+			logMessage(sys.argv, serverAddress, serverPort)
+			# Send List Of Files Belonging To This Server
+			tempDirList = subprocess.Popen('ls -l /tmp/%s*' % (serverAddress), shell=True, stdout=subprocess.PIPE).stdout
+			tempDirListing = tempDirList.readlines()
+			tempData = ''
+			for fileFound in tempDirListing:
+				tempData += fileFound
+			tempData = "Files In /etc\n%s" % (tempData)
+			logMessage(tempData, serverAddress, serverPort)
+		except:
+			print "DEBUG_ERROR: %s" % (sys.exc_info()[1])
 else:
-	print "OS X Server Monitoring Tool"
-	print "\tCopyright (C) 2010 Felim Whiteley"
+	print "OS X Server Monitoring Tool\n\tVersion: 0.6.2"
+	print "\tCopyright (C) 2010 - 2011 Felim Whiteley"
+	print "\thttp://whiteleytech.ie"
 	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
 	print "This software is licensed under the GNU Lesser General Public License\n"
 	print "USAGE: check_osx_server SERVICENAME ADDRESS PORT USER PASSWORD [Optional Sub-Service Ignore List]"
@@ -100,6 +177,17 @@ else:
 	print "\nWhen adding Sub-Service ignore values they should be the last argument, seperated by commas and contain no whitespace"
 	print "\nEXAMPLE: check_osx_server jabber 172.16.12.1 311 srvadmin srvpassword mucState,proxyState\n"
 	print "\tmucState & proxyState will be ignored and will not trigger a warning\n"
+	print "-----------"
+	print "System Load"
+	print "-----------"
+	print "USAGE: check_osx_server SYSTEMSTAT ADDRESS PORT USER PASSWORD WARN_THRESHOLD CRIT_THRESHOLD"
+	print "\nSYSTEMSTAT:"
+	print "\tcpuUsage\t\tView Percentage Of Aggregated CPU(s) & Cores Used"
+	print "\tnetUsage\t\tView The Overall Kilobits/Second Network Usage"
+	print "\thddUsage\t\tView Percentage Of HDD Used On All Drives"
+	print "\tsysUsage\t\tCombined View Of All Of The Above\n"
+	print "\t\tThe WARN_THRESHOLD & CRIT_THRESHOLD are optional and default to 80% & 90% respectivly"
+	print "\t\t(If you do use your own values you must use both or it will trigger an error) \n"
 	print "------------------"
 	print "Informational Mode"
 	print "------------------"
@@ -112,25 +200,36 @@ else:
 	print ""
 	sys.exit(0)
 
-# Ignore List For subServices
-if len(sys.argv) > 6:
-	subServiceIgnoreCSV = sys.argv[6]
-	subServiceIgnore = subServiceIgnoreCSV.split(',')
-else:
-	subServiceIgnore = []
-
-debugMode = 0
 warningCount = 0
 criticalCount = 0
 unknownCount = 0
 
 def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataReqTimescale=None, dataReqIdentifier=None, dataReqOffset=None, dataReqAmount=None):
+	# TEST Mode - This will be moving somewhere else
+	if testMode:
+		if servermgrdModule == "servermgr_xgrid":
+			# XGrid test Data
+			serviceData = {'servicePortsAreRestricted': 'NO', 'servicePortsRestrictionInfo': [], 'state': 'RUNNING', 'readWriteSettingsVersion': 1, 'startedTime': '', 'setStateVersion': 1, 'command': 'getState', 'controllerStatus': {'status': 'OK', 'workingCPUPower': '5'}, 'logPaths': {'xgridSystemLog': '/var/log/system.log', 'xgridAgentLog': '/Library/Logs/Xgrid/xgridagentd.log', 'xgridControllerLog': '/Library/Logs/Xgrid/xgridcontrollerd.log'}, 'agentStatus': {'status': 'STOPPED', 'activeCPUPower': '1'}}
+			return serviceData
+		else:
+			print "TEST NOT AVAILABLE: '%s'" % servermgrdModule
+			sys.exit(0)
 	# buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None )
 	dataRequest = srvrmgrdIO.buildXML(dataReqCommand, dataReqVariant, dataReqTimescale, dataReqIdentifier, dataReqOffset, dataReqAmount)
-	dataFileLocation = srvrmgrdIO.buildDataFile(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword)
-	dataFile = open(dataFileLocation, "rb")
-	serviceData = pickle.load(dataFile)
-	dataFile.close()
+	if debugMode:
+		serverMessage = "#### REQUEST ####\n%s\n #### END REQUEST ####\n" % (dataRequest)
+		logMessage(serverMessage, serverAddress, serverPort)
+		serverMessage = "VARIABLES: [%s]\n servermgrdModule = '%s'\n serverAddress = '%s'\n serverPort  = '%s'\n serverUser = '%s'\n serverPassword = '%s'" % (len(sys.argv), servermgrdModule, serverAddress, serverPort, serverUser, serverPassword)
+		logMessage(serverMessage, serverAddress, serverPort)
+	if dataFileMode:
+		# Store Data In /tmp
+		dataFileLocation = srvrmgrdIO.buildDataFile(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword, debugMode)
+		dataFile = open(dataFileLocation, "rb")
+		serviceData = pickle.load(dataFile)
+		dataFile.close()
+	else:
+		# Dont Store Data In /tmp
+		serviceData = srvrmgrdIO.sendXML(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword)
 	return serviceData
 
 def getServiceState(serviceData):
@@ -149,40 +248,78 @@ def getServiceState(serviceData):
 		criticalCount += 1
 	return serviceStatus, criticalCount
 
+def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
+	warningCount = 0
+	criticalCount = 0
+	if warnLevel < critLevel:
+		# For Processor/Mem Usage Where We Have An Upper Limit
+		if sensorReading >= critLevel:
+			criticalCount += 1
+		elif sensorReading >= warnLevel:
+			warningCount += 1
+	elif warnLevel > critLevel:
+		# Where We Want To Be Warned When They Run Out Of Resouce ie. Lower Limit
+		if sensorReading <= critLevel:
+			criticalCount += 1
+		elif sensorReading <= warnLevel:
+			warningCount += 1
+	else:
+		# Stop Folk Setting Warn & Crit To Same Value... ;)
+		print "ERROR: Warning & Critical Levels Are The Same"
+		sys.exit(1)
+	return warningCount, criticalCount
+
 def getSubServiceState(subServices, serviceData, subServiceIgnore):
 	warningCount = 0
 	subServiceStatus = ""
-	# Some Services Use Sub-Arrays Within The PList - We need to had a Sub-SubService
+	# Some Services Use Sub-Arrays Within The PList - We need to handle a Sub-SubService
 	# Effectivly: This is rather ugly and should really change this!
 	if isinstance(subServices, dict):
 		for subServiceName, subServiceArray in subServices.iteritems():
 			if subServiceName in serviceData:
 				subServiceInfo = ''
 				for subServiceItem in subServiceArray:
+					# Default to Showing Sub Services In Output
+					displaySubService = 1
 					if subServiceItem in serviceData[subServiceName].keys():
 						subServiceState = serviceData[subServiceName][subServiceItem]
-						if subServiceInfo == '':
-							subServiceInfo = "[%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
-						else:
-							subServiceInfo = "%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
+						# Are we tracking Sub Service Warnings For This Sub Service
 						if subServiceName not in subServiceIgnore:
 							# Need to strip out possible float values - This is very hackish
 							if not str(subServiceState).replace('.', '').isdigit():
 								if subServiceState.upper() in ('UNAVAILABLE', 'STOPPED', 'OFF'):
 									warningCount += 1
+						else:
+							# A Sub Service We Want To Ignore
+							if not showDisabledSubServices:
+								# Are We Globally Showing Disabled Subservices
+								displaySubService = 0
+						if displaySubService:
+							if subServiceInfo == '':
+								subServiceInfo = "[%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
+							else:
+								subServiceInfo = "%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
 				if subServiceInfo != '':
 					subServiceStatus = "%s%s:%s] " % (subServiceStatus, subServiceName, subServiceInfo.rstrip())
 	# Normal Sub-Services
 	else:
 		for subService in subServices:
+			# Default to Showing Sub Services In Output
+			displaySubService = 1
 			if subService in serviceData:
 				subServiceState = serviceData[subService]
-				subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
 				if subService not in subServiceIgnore:
 					# Need to strip out possible float values - This is very hackish
 					if not str(subServiceState).replace('.', '').isdigit():
 						if subServiceState.upper() in ('STOPPED', 'OFF'):
 							warningCount += 1
+				else:
+					# Ignoring SubServices
+					# Are We Showing Them?
+					if not showDisabledSubServices:
+						displaySubService = 0
+				if displaySubService:
+					subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
 	return subServiceStatus, warningCount
 
 # Process The Service
@@ -200,6 +337,61 @@ if checkService in ('afpUserList', 'smbUserList'):
 		if userCount:
 			print userList
 		serviceStatus = "Connections:%s" % (userCount)
+elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
+	dataReqCommand = 'getHardwareInfo'
+	serviceData = getServiceData('servermgr_info', dataReqCommand, '')
+	serviceStatus = ''
+	warnLevel = None
+	critLevel = None
+	warningCountMaster = 0
+	criticalCountMaster = 0
+	# It's optional to provide the thresholds but must provide both if you do
+	if len(sys.argv) > (6 + debugMode):
+		# Must Have Both Warn And Crit Set
+		if len(sys.argv) == (8 + debugMode):
+			warnLevel = int(sys.argv[6 + debugMode])
+			critLevel = int(sys.argv[7 + debugMode])
+		else:
+			print "ERROR: Incorrect Number Of Arguments"
+			sys.exit(1)
+	if checkService in ('sysUsage', 'cpuUsage'):
+		sensorReading = int(serviceData['cpuUsageBy100']/100)
+		if warnLevel and critLevel:
+			warningCount, criticalCount = getServiceThreshold(sensorReading, warnLevel, critLevel)
+		else:
+			warningCount, criticalCount = getServiceThreshold(sensorReading)
+		warningCountMaster += warningCount
+		criticalCountMaster += criticalCount
+		serviceStatus += "cpuUsage:%s%% " % (sensorReading)
+	if checkService in ('sysUsage', 'netUsage'):
+		sensorReading = int(serviceData['networkThroughputBy1K'])
+		# If no threshold set then we don't check becasue no precentage calculation possible with network
+		if warnLevel and critLevel:
+			warningCount, criticalCount = getServiceThreshold(sensorReading, warnLevel, critLevel)
+		warningCountMaster += warningCount
+		criticalCountMaster += criticalCount
+		serviceStatus += "netUsage:%skb/s " % (sensorReading)
+	if checkService in ('sysUsage', 'hddUsage'):
+		hddStatus = ""
+		for hddInfo in serviceData['volumeInfosArray']:
+			hddName = hddInfo['name']
+			totalBytes = float(hddInfo['totalBytes'])
+			freeBytes = float(hddInfo['freeBytes'])
+			usedBytes = float(totalBytes-freeBytes)
+			hddUsagePercentage = int((usedBytes/totalBytes) * 100)
+			# If Thresholds Are Set Check If Lower Than 100 - Assume Percentage, Otherwise Actual Bytes
+			hddStatus += "'%s':%s%% " % (hddName, hddUsagePercentage)
+			if warnLevel and warnLevel <= 100:
+				warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel, critLevel)
+				warningCountMaster += warningCount
+				criticalCountMaster += criticalCount
+			elif warnLevel and warnLevel > 100:
+				warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel, critLevel)
+				warningCountMaster += warningCount
+				criticalCountMaster += criticalCount
+		serviceStatus += "hddUsage:[%s] " % (hddStatus.rstrip())
+	warningCount = warningCountMaster
+	criticalCount = criticalCountMaster
 elif checkService == "mail":
 	serviceData = getServiceData('servermgr_mail', 'getState', 'withDetails')
 	serviceStatus, criticalCount = getServiceState(serviceData)
@@ -223,12 +415,12 @@ elif checkService == "mail":
 				serviceStatus = "%s%s-%s:(%s) " % (serviceStatus, name, kind, status)
 elif checkService in ("softwareupdates", "softwareupdatesList"):
 	patchList = []
+	normalPatches = 0
+	recommendedPatches = 0
+	restartRequired = 0
 	serviceData = getServiceData('servermgr_info', 'getSWUpdateStatus')
 	if 'swupdateStatus' in serviceData:
 		if 'phaseResultsArray' in serviceData['swupdateStatus']:
-			normalPatches = 0
-			recommendedPatches = 0
-			restartRequired = 0
 			for softwareUpdate in serviceData['swupdateStatus']['phaseResultsArray']:
 				if softwareUpdate['ignored']: # ie. Ignored Is True - Meaning Don't Ignore!
 					normalPatches += 1
@@ -284,7 +476,12 @@ else:
 
 # If In Debug Mode Print Out The Returned Dictionary So Can Check Values etc.
 if debugMode:
-	print serviceData
+	serverMessage = serviceData
+	logMessage(serverMessage, serverAddress, serverPort)
+	serverMessage = "unknownCount: %s\nwarningCount: %s\ncriticalCount: %s" % (unknownCount, warningCount, criticalCount)
+	logMessage(serverMessage, serverAddress, serverPort)
+	serverMessage = "serviceStatus: '%s'" % serviceStatus
+	logMessage(serverMessage, serverAddress, serverPort)
 # End Checks Print Status Message And Exit With Correct Exit Code
 # Nagios Return Codes
 # 0 - OK
