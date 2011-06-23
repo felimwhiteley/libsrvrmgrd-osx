@@ -195,7 +195,7 @@ else:
 	print "\nINFOMODES:"
 	print "\tafpUserList\t\tView User(s) Connected Via AFP"
 	print "\tsmbUserList\t\tView User(s) Connected Via SMB"
-	print "\tserverRole\t\tList The Roles & Service Configured"
+	print "\tserverRole\t\tList The Roles & Services Configured"
 	print "\tsoftwareupdatesList\tList All Updates Required By The Server"
 	print ""
 	sys.exit(0)
@@ -452,6 +452,8 @@ elif checkService == "serverRole":
 			for serverRole, serverRoleStatus in serviceData['serviceConfig']['roles'].iteritems():
 				if serverRoleStatus['configured']:
 					serviceStatus = "%s\t%s\n" % (serviceStatus, serverRole)
+				else:
+					serviceStatus = "No Configured Roles\n"
 		if 'services' in serviceData['serviceConfig']:
 			serviceStatus = "%sActive Services:\n" % (serviceStatus)
 			for serviceName, serviceNameStatus in serviceData['serviceConfig']['services'].iteritems():
