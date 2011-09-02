@@ -11,7 +11,7 @@
 #             http://www.linkedin.com/in/felimwhiteley
 #	      http://whiteleytech.ie
 #
-#    Version: 0.6.2
+#    Version: 0.6.3
 #
 #    This is free software; you can redistribute it and/or modify it
 #    under the terms of the GNU Lesser General Public License as
@@ -85,7 +85,8 @@ osxServices = {
 	'vpn': [],
 	'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests'],
 	'webobjects': [],
-	'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']}
+	'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']},
+	'xsan': ['perfDispatchMicroseconds', 'perfFunctionMicroseconds']
 }
 
 def convertListToCsv(pythonList, sqlMode=0):
@@ -147,7 +148,7 @@ if len(sys.argv) >= 6:
 			tempData = ''
 			for fileFound in tempDirListing:
 				tempData += fileFound
-			tempData = "Files In /etc\n%s" % (tempData)
+			tempData = "Files In /tmp\n%s" % (tempData)
 			logMessage(tempData, serverAddress, serverPort)
 		except:
 			print "DEBUG_ERROR: %s" % (sys.exc_info()[1])
@@ -211,6 +212,10 @@ def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataRe
 			# XGrid test Data
 			serviceData = {'servicePortsAreRestricted': 'NO', 'servicePortsRestrictionInfo': [], 'state': 'RUNNING', 'readWriteSettingsVersion': 1, 'startedTime': '', 'setStateVersion': 1, 'command': 'getState', 'controllerStatus': {'status': 'OK', 'workingCPUPower': '5'}, 'logPaths': {'xgridSystemLog': '/var/log/system.log', 'xgridAgentLog': '/Library/Logs/Xgrid/xgridagentd.log', 'xgridControllerLog': '/Library/Logs/Xgrid/xgridcontrollerd.log'}, 'agentStatus': {'status': 'STOPPED', 'activeCPUPower': '1'}}
 			return serviceData
+		elif servermgrdModule == "" and dataReqCommand == "getHardwareInfo":
+			# hddStatus, cpuUsage etc.
+			serviceData = {'cpuUsageBy100': 315, 'volumeInfosArray': [{'totalBytes': 161061273600, 'name': 'ServerHD', 'freeBytes': 146084642816}, {'totalBytes': 161061273600, 'name': 'NetBootHD', 'freeBytes': 107296305152}, {'totalBytes': 1177566953472, 'name': 'SnapshotHD', 'freeBytes': 472142860288}, {'totalBytes': 2450234761216, 'name': 'BackupHD', 'freeBytes': 386296975360}, {'totalBytes': 549411840000, 'name': 'DataHD', 'freeBytes': 157978660864}], 'networkThroughputBy1K': 655, 'cpuUsagesBy100Array': [{'cpuUsage-0': 903}, {'cpuUsage-1': 13}, {'cpuUsage-2': 682}, {'cpuUsage-3': 11}, {'cpuUsage-4': 550}, {'cpuUsage-5': 10}, {'cpuUsage-6': 343}, {'cpuUsage-7': 6}], 'command': 'getHardwareInfo', 'networkThroughput': 671107}
+			return serviceData
 		else:
 			print "TEST NOT AVAILABLE: '%s'" % servermgrdModule
 			sys.exit(0)
@@ -249,6 +254,10 @@ def getServiceState(serviceData):
 	return serviceStatus, criticalCount
 
 def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
+	# Debug Output
+	if debugMode:
+		serverMessage = "#### getServiceThreshold####\nsensorReading: %s\nwarnLevel: %s\ncritLevel: %s" % (sensorReading, warnLevel, critLevel)
+		logMessage(serverMessage, serverAddress, serverPort)
 	warningCount = 0
 	criticalCount = 0
 	if warnLevel < critLevel:
@@ -379,14 +388,14 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
 			freeBytes = float(hddInfo['freeBytes'])
 			usedBytes = float(totalBytes-freeBytes)
 			hddUsagePercentage = int((usedBytes/totalBytes) * 100)
-			# If Thresholds Are Set Check If Lower Than 100 - Assume Percentage, Otherwise Actual Bytes
+			# If Thresholds Are Set else use defaults of 80 & 90
 			hddStatus += "'%s':%s%% " % (hddName, hddUsagePercentage)
-			if warnLevel and warnLevel <= 100:
+			if warnLevel and critLevel:
 				warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel, critLevel)
 				warningCountMaster += warningCount
 				criticalCountMaster += criticalCount
-			elif warnLevel and warnLevel > 100:
-				warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel, critLevel)
+			else:
+				warningCount, criticalCount = getServiceThreshold(hddUsagePercentage)
 				warningCountMaster += warningCount
 				criticalCountMaster += criticalCount
 		serviceStatus += "hddUsage:[%s] " % (hddStatus.rstrip())
@@ -480,7 +489,7 @@ else:
 if debugMode:
 	serverMessage = serviceData
 	logMessage(serverMessage, serverAddress, serverPort)
-	serverMessage = "unknownCount: %s\nwarningCount: %s\ncriticalCount: %s" % (unknownCount, warningCount, criticalCount)
+	serverMessage = "#### EXIT STATUS ####\nunknownCount: %s\nwarningCount: %s\ncriticalCount: %s" % (unknownCount, warningCount, criticalCount)
 	logMessage(serverMessage, serverAddress, serverPort)
 	serverMessage = "serviceStatus: '%s'" % serviceStatus
 	logMessage(serverMessage, serverAddress, serverPort)
@@ -496,11 +505,11 @@ if debugMode:
 #              errors, socket timeouts, etc) are outside of the control of
 #              plugins and should generally NOT be reported as UNKNOWN states.)
 print serviceStatus
-if unknownCount:
-        sys.exit(3)
-elif criticalCount:
+if criticalCount:
         sys.exit(2)
 elif warningCount:
 	sys.exit(1)
+elif unknownCount:
+        sys.exit(3)
 else :
         sys.exit(0)
