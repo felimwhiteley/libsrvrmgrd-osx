@@ -134,17 +134,23 @@ def requestServerData(url, webuser = None, webpass = None):
 		# This bit identifies if it's leopard which adds extra unneeded info as a header
 		if re.match("SupportsBinaryPlist", htmlData):
 			xmlDump = re.split("\r\n\r\n", htmlData, 1)
-			return xmlDump[1]
+			return 0, xmlDump[1]
 		else:
-			return htmlData
+			return 0, htmlData
 	except HTTPError, e:
     		print e.code
 		print e.headers
-		sys.exit(2)
+		return 1, [e.code, e.header]
 
 def sendXML(servermgrdModule, request, server, port, webuser, webpass):
   	url = 'https://'+server+':'+port+'/commands/'+servermgrdModule+'?input='+urllib.quote(request)
-	xmlresult = requestServerData(url, webuser, webpass)
+	httpError, xmlresult = requestServerData(url, webuser, webpass)
+	if httpError:
+		serverMessage = "HTTPError CODE: %s" % (xmlresult[0])
+		logMessage(serverMessage, server, port)
+		serverMessage = "HTTPError HEADER: %s" % (xmlresult[1])
+		logMessage(serverMessage, server, port)
+		sys.exit(2)
 	xmlFauxFile = StringIO.StringIO(xmlresult)
 	return plistlib.Plist.fromFile(xmlFauxFile)
 
