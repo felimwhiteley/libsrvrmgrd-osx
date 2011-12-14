@@ -56,7 +56,7 @@ import pickle
 # discover these; https://your.server:311
 # ** timescale defines how many data samples to return (when applicable)
 
-def buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None, state=None ) :
+def buildXML ( command, variant=None, timescale=None, identifier=None, offset=None, amount=None, state=None, name=None ) :
 	request = """<?xml version="1.0" encoding="UTF-8"?>
 <plist version="0.9">
 <dict>
@@ -64,6 +64,13 @@ def buildXML ( command, variant=None, timescale=None, identifier=None, offset=No
 	<string>"""
 	request = request + command
 	request = request + '</string>'
+
+	if name :
+		request = request + """
+	<key>name</key>
+	<string>"""
+		request = request + name
+		request = request + '</string>'
 
 	if identifier :
 		request = request + """

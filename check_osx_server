@@ -86,7 +86,7 @@ osxServices = {
 	'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests'],
 	'webobjects': [],
 	'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']},
-	'xsan': ['perfDispatchMicroseconds', 'perfFunctionMicroseconds']
+	'xsan': []
 }
 
 def convertListToCsv(pythonList, sqlMode=0):
@@ -469,6 +469,17 @@ elif checkService == "serverRole":
 				if serviceNameStatus['configured']:
 					serviceStatus = "%s\t%s\n" % (serviceStatus, serviceName)
 	serviceStatus.rstrip('\n')
+# TODO - XSan Testing
+elif checkService == "xsan":
+	# Get The initial Service State
+	serviceData = getServiceData('servermgr_%s' % checkService, 'getState')
+	serviceStatus, criticalCount = getServiceState(serviceData)
+	for xsanCheck in ['getComputerProperties', 'getLUNs', 'getHistoryInfo', 'getVolumes']:
+		serviceData = getServiceData('servermgr_%s' % checkService, xsanCheck)
+		serviceStatus, criticalCount = getServiceState(serviceData)
+	serviceData = getServiceData('servermgr_%s' % checkService, 'getQuotas', name='SANVolume')
+	serviceStatus, criticalCount = getServiceState(serviceData)
+	sys.exit(0)
 elif checkService in osxServices:
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getState', 'withDetails')
 	serviceStatus, criticalCount = getServiceState(serviceData)
