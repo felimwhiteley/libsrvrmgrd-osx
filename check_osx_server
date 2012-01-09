@@ -11,7 +11,6 @@
 #             http://www.linkedin.com/in/felimwhiteley
 #	      http://whiteleytech.ie
 #
-#    Version: 0.6.4
 #
 #    This is free software; you can redistribute it and/or modify it
 #    under the terms of the GNU Lesser General Public License as
@@ -30,6 +29,8 @@
 
 
 import pickle, srvrmgrdIO, subprocess, sys, time
+
+__version__ = "0.6.4-pre-1"
 
 configINI = '/etc/libServerManagerDaemon.ini'
 
@@ -54,12 +55,15 @@ def logMessage(serverMessage, serverAddress, serverPort):
 # CLI Debug Switch
 debugMode = 0
 testMode = 0
+listModules = 0
 if len(sys.argv) > 1:
 	if sys.argv[1] == "DEBUG":
 		debugMode = 1
 	elif sys.argv[1] == "TEST":
 		testMode = 1
 		debugMode = 1
+	elif sys.argv[1] == "LIST":
+		listModules = 1
 
 # Module Configuration
 osxServices = {
@@ -85,8 +89,7 @@ osxServices = {
 	'vpn': [],
 	'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests'],
 	'webobjects': [],
-	'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']},
-	'xsan': []
+	'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']}
 }
 
 def convertListToCsv(pythonList, sqlMode=0):
@@ -104,56 +107,9 @@ def convertListToCsv(pythonList, sqlMode=0):
 				csvString = "%s,%s" % (csvString, listItem)
         return csvString
 
-# Load Config File If Available
-configDebugMessage = ''
-try:
-	import ConfigParser
-	config = ConfigParser.ConfigParser()
-	config.readfp(open(configINI))
-	try:
-		dataFileMode = int(config.get("config", "dataFileMode"))
-	except:
-		pass
-	try:
-		showDisabledSubServices = int(config.get("config", "showDisabledSubServices"))
-	except:
-		pass
-	configDebugMessage = "DEBUG: %s Found: dataFileMode:%s" % (configINI, dataFileMode)
-except:
-	configDebugMessage = "ERROR: %s Not Found Or Invalid" % (configINI)
 
-if len(sys.argv) >= 6:
-	# If We Are Running In Debug Then Shift The Position Of All Variables
-	checkService = sys.argv[1 + debugMode]
-	serverAddress = sys.argv[2 + debugMode]
-	serverPort = sys.argv[3 + debugMode]
-	serverUser = sys.argv[4 + debugMode]
-	serverPassword = sys.argv[5 + debugMode]
-	# Ignore List For subServices
-	if len(sys.argv) > (6 + debugMode):
-		subServiceIgnoreCSV = sys.argv[6 + debugMode]
-		subServiceIgnore = subServiceIgnoreCSV.split(',')
-	else:
-		subServiceIgnore = []
-	if debugMode:
-		if configDebugMessage:
-			# Send Config Parse Message to Log
-			logMessage(configDebugMessage, serverAddress, serverPort)
-		try:
-			# Send System Args To Log
-			logMessage(sys.argv, serverAddress, serverPort)
-			# Send List Of Files Belonging To This Server
-			tempDirList = subprocess.Popen('ls -l /tmp/%s*' % (serverAddress), shell=True, stdout=subprocess.PIPE).stdout
-			tempDirListing = tempDirList.readlines()
-			tempData = ''
-			for fileFound in tempDirListing:
-				tempData += fileFound
-			tempData = "Files In /tmp\n%s" % (tempData)
-			logMessage(tempData, serverAddress, serverPort)
-		except:
-			print "DEBUG_ERROR: %s" % (sys.exc_info()[1])
-else:
-	print "OS X Server Monitoring Tool\n\tVersion: 0.6.2"
+def pluginUsage():
+	print "OS X Server Monitoring Tool\n\tVersion: %s" % (__version__)
 	print "\tCopyright (C) 2010 - 2011 Felim Whiteley"
 	print "\thttp://whiteleytech.ie"
 	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
@@ -200,6 +156,89 @@ else:
 	print "\tsoftwareupdatesList\tList All Updates Required By The Server"
 	print ""
 	sys.exit(0)
+
+# Load Config File If Available
+configDebugMessage = ''
+try:
+	import ConfigParser
+	config = ConfigParser.ConfigParser()
+	config.readfp(open(configINI))
+	try:
+		dataFileMode = int(config.get("config", "dataFileMode"))
+	except:
+		pass
+	try:
+		showDisabledSubServices = int(config.get("config", "showDisabledSubServices"))
+	except:
+		pass
+	configDebugMessage = "DEBUG: %s Found: dataFileMode:%s" % (configINI, dataFileMode)
+except:
+	configDebugMessage = "ERROR: %s Not Found Or Invalid" % (configINI)
+
+if listModules:
+	if len(sys.argv) == 6:
+		serverAddress = sys.argv[2]
+		serverPort = sys.argv[3]
+		serverUser = sys.argv[4]
+		serverPassword = sys.argv[5]
+		moduleList = []
+		httpError, srvrmgrData = srvrmgrdIO.requestServerData("https://%s:%s" % (serverAddress, serverPort), serverUser, serverPassword)
+		if not httpError:
+			for item in srvrmgrData.split('\n'):
+				if "HREF" in item:
+					rawModule = item[item.index('HREF="servermgr'):]
+					try:
+						moduleList.append(rawModule.split('"')[1].split(".")[0])
+					except:
+						print "PARSE_ERROR: %s" % (item)
+				#else:
+				#	print "PARSE_MISS: %s" % item
+			if len(moduleList) > 0:
+				print " Modules Found:\n [* = monitoring available]"
+			osxServicesAvail = osxServices.keys()
+			for srvrModule in moduleList:
+				if srvrModule.replace("servermgr_", "") in osxServicesAvail:
+					print "\t\t\t* %s" % (srvrModule)
+				else:
+					print "\t\t\t  %s" % (srvrModule)
+
+		else:
+			print "ERROR: Could Not Contact The Server %s" % (httpError)
+		sys.exit(0)
+	else:
+		pluginUsage()
+elif len(sys.argv) >= 6:
+	# If We Are Running In Debug Then Shift The Position Of All Variables
+	checkService = sys.argv[1 + debugMode]
+	serverAddress = sys.argv[2 + debugMode]
+	serverPort = sys.argv[3 + debugMode]
+	serverUser = sys.argv[4 + debugMode]
+	serverPassword = sys.argv[5 + debugMode]
+	# Ignore List For subServices
+	if len(sys.argv) > (6 + debugMode):
+		subServiceIgnoreCSV = sys.argv[6 + debugMode]
+		subServiceIgnore = subServiceIgnoreCSV.split(',')
+	else:
+		subServiceIgnore = []
+	if debugMode:
+		if configDebugMessage:
+			# Send Config Parse Message to Log
+			logMessage(configDebugMessage, serverAddress, serverPort)
+		try:
+			# Send System Args To Log
+			logMessage(sys.argv, serverAddress, serverPort)
+			# Send List Of Files Belonging To This Server
+			tempDirList = subprocess.Popen('ls -l /tmp/%s*' % (serverAddress), shell=True, stdout=subprocess.PIPE).stdout
+			tempDirListing = tempDirList.readlines()
+			tempData = ''
+			for fileFound in tempDirListing:
+				tempData += fileFound
+			tempData = "Files In /tmp\n%s" % (tempData)
+			logMessage(tempData, serverAddress, serverPort)
+		except:
+			print "DEBUG_ERROR: %s" % (sys.exc_info()[1])
+else:
+	pluginUsage()
 
 warningCount = 0
 criticalCount = 0
@@ -480,6 +519,7 @@ elif checkService == "xsan":
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getQuotas', name='SANVolume')
 	serviceStatus, criticalCount = getServiceState(serviceData)
 	sys.exit(0)
+# TODO - END
 elif checkService in osxServices:
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getState', 'withDetails')
 	serviceStatus, criticalCount = getServiceState(serviceData)
