@@ -9,7 +9,7 @@
 #
 #    Author: Felim Whiteley <felimwhiteley@gmail.com>
 #             http://www.linkedin.com/in/felimwhiteley
-#	      http://whiteleytech.ie
+#	      http://www.whiteleytech.ie
 #
 #
 #    This is free software; you can redistribute it and/or modify it
@@ -56,18 +56,23 @@ def logMessage(serverMessage, serverAddress, serverPort):
 debugMode = 0
 testMode = 0
 listModules = 0
+listModulesCommands = 0
+# Debug & Testing Modes
 if len(sys.argv) > 1:
 	if sys.argv[1] == "DEBUG":
 		debugMode = 1
 	elif sys.argv[1] == "TEST":
 		testMode = 1
 		debugMode = 1
-	elif sys.argv[1] == "LIST":
+	elif sys.argv[1] in ["LIST", "LISTDETAILS"]:
 		listModules = 1
+		if sys.argv[1] == "LISTDETAILS":
+			listModulesCommands = 1
 
 # Module Configuration
 osxServices = {
 	'afp': ['currentConnections'],
+	'backup': [],
 	'calendar': [],
 	'dhcp': ['numDHCPLeases', 'numConfiguredStaticMaps', 'timeOfSnapShot', 'numActiveStaticMaps'],
 	'dirserv': ['timState', 'ldapdState', 'kdcStatus', 'lookupdState', 'passwordServiceState', 'netinfodState', 'netinfodParentState'],
@@ -81,8 +86,11 @@ osxServices = {
 	'nfs': ['nsfd', 'mountd', 'portmap', 'rpc.lockd'],
 	'pcast': ['onlineCameras', 'totalCameras', 'currentJobs', 'totalJobs'],
 	'print': ['currentJobs', 'currentQueues'],
+	'proxy': [],
 	'qtss': ['stateAFP', 'stateDHCP', 'stateHTTP', 'stateNFS', 'stateTFTP'],
 	'radius': [],
+	'sharing': [],
+	'signaler': [],
 	'smb': ['currentConnections'],
 	'swupdate': ['numOfMirroredPkg', 'numOfEnbabledPkg'],
 	'teams': [],
@@ -111,7 +119,7 @@ def convertListToCsv(pythonList, sqlMode=0):
 def pluginUsage():
 	print "OS X Server Monitoring Tool\n\tVersion: %s" % (__version__)
 	print "\tCopyright (C) 2010 - 2011 Felim Whiteley"
-	print "\thttp://whiteleytech.ie"
+	print "\thttp://www.whiteleytech.ie"
 	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
 	print "This software is licensed under the GNU Lesser General Public License\n"
 	print "USAGE: check_osx_server SERVICENAME ADDRESS PORT USER PASSWORD [Optional Sub-Service Ignore List]"
@@ -126,13 +134,13 @@ def pluginUsage():
 		if isinstance(subServiceList, dict):
 			print "\t%s%s%s" % (serviceName, txtTabs, convertListToCsv(subServiceList.keys()))
 		elif len(subServiceList) == 0:
-			noSubServices = "--NO SUB-SERVICES AVAILABLE--"
+			noSubServices = "-" #"--NO SUB-SERVICES AVAILABLE--"
 			print "\t%s%s%s" % (serviceName, txtTabs, noSubServices)
 		else:
 			print "\t%s%s%s" % (serviceName, txtTabs, convertListToCsv(subServiceList))
-	print "\tsoftwareupdates\t--NO SUB-SERVICES AVAILABLE--"
+	print "\tsoftwareupdates\t-" #"-NO SUB-SERVICES AVAILABLE--"
 	print "\nWhen adding Sub-Service ignore values they should be the last argument, seperated by commas and contain no whitespace"
-	print "\nEXAMPLE: check_osx_server jabber 172.16.12.1 311 srvadmin srvpassword mucState,proxyState\n"
+	print "\nEXAMPLE: check_osx_server jabber 172.16.12.1 311 admin_user admin_user_password mucState,proxyState\n"
 	print "\tmucState & proxyState will be ignored and will not trigger a warning\n"
 	print "-----------"
 	print "System Load"
@@ -185,25 +193,45 @@ if listModules:
 		httpError, srvrmgrData = srvrmgrdIO.requestServerData("https://%s:%s" % (serverAddress, serverPort), serverUser, serverPassword)
 		if not httpError:
 			for item in srvrmgrData.split('\n'):
-				if "HREF" in item:
+				if 'HREF="servermgr' in item:
 					rawModule = item[item.index('HREF="servermgr'):]
 					try:
-						moduleList.append(rawModule.split('"')[1].split(".")[0])
+						moduleName = rawModule.split('"')[1].split(".")[0]
+						moduleList.append(moduleName)
 					except:
 						print "PARSE_ERROR: %s" % (item)
+				# This can show us the other data in the file we aren't interested in
 				#else:
 				#	print "PARSE_MISS: %s" % item
 			if len(moduleList) > 0:
 				print " Modules Found:\n [* = monitoring available]"
 			osxServicesAvail = osxServices.keys()
+			# Clunkyily adding a few we monitor in non-dict mode
+			# TODO - Tidy this up
+			osxServicesAvail.append("mail")
 			for srvrModule in moduleList:
 				if srvrModule.replace("servermgr_", "") in osxServicesAvail:
-					print "\t\t\t* %s" % (srvrModule)
+					print "\t\t* %s" % (srvrModule)
 				else:
-					print "\t\t\t  %s" % (srvrModule)
-
+					print "\t\t  %s" % (srvrModule)
+				if listModulesCommands:
+					httpError, srvrmgrData = srvrmgrdIO.requestServerData("https://%s:%s/%s.html" % (serverAddress, serverPort, srvrModule), serverUser, serverPassword)
+					if not httpError:
+						for item in srvrmgrData.split('\n'):
+							if 'OPTION VALUE="' in item:
+								rawModule = item[item.index('OPTION VALUE="'):]
+								try:
+									# Example Data:
+									# <OPTION VALUE="authenticateAdmin">authenticateAdmin
+									commandName = rawModule.split('"')[1]
+									print "\t\t\t%s" % (commandName)
+								except:
+									pass
+									#print "\t\t\tERROR:%s" % (sys.exc_info()[0])
+					#else:
+					#	print "\t\t\tERROR:%s" % (srvrmgrData)
 		else:
-			print "ERROR: Could Not Contact The Server %s" % (httpError)
+			print "ERROR: Problem Contacting Server:%s" % (srvrmgrData)
 		sys.exit(0)
 	else:
 		pluginUsage()
@@ -280,17 +308,21 @@ def getServiceState(serviceData):
 	# Set some intial values
 	serviceStatus = ""
 	criticalCount = 0
+	warningCount = 0
+	unknownCount = 0
 	serviceState = serviceData['state']
 	if 'state' in serviceData:
-		if serviceState == 'RUNNING':
+		if serviceState in ['RUNNING', 'idle']:
 			serviceStatus = "%s" % (serviceState)
+		elif serviceState == 'UNKNOWN':
+			unknownCount += 1
 		else :
 				criticalCount += 1
-				serviceStatus = "%s" % (serviceState)
+		serviceStatus = "%s" % (serviceState)
 	else:
 		serviceStatus = "UNKNOWN: Invalid Data Returned From Service Check"
-		criticalCount += 1
-	return serviceStatus, criticalCount
+		unknownCount += 1
+	return serviceStatus, criticalCount, warningCount, unknownCount
 
 def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
 	# Debug Output
@@ -317,8 +349,7 @@ def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
 		sys.exit(1)
 	return warningCount, criticalCount
 
-def getSubServiceState(subServices, serviceData, subServiceIgnore):
-	warningCount = 0
+def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore):
 	subServiceStatus = ""
 	# Some Services Use Sub-Arrays Within The PList - We need to handle a Sub-SubService
 	# Effectivly: This is rather ugly and should really change this!
@@ -375,7 +406,7 @@ if checkService in ('afpUserList', 'smbUserList'):
 	dataReqCommand = 'getConnectedUsers'
 	# Strip First 3 Characters To Run Against Correct OSX Module
 	serviceData = getServiceData('servermgr_%s' % (checkService[:3]), dataReqCommand, 'withDetails')
-	serviceStatus, criticalCount = getServiceState(serviceData)
+	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	if not criticalCount:
 		userCount = 0
 		userList = "%s Connections Active\n" % (checkService[:3].upper())
@@ -442,7 +473,7 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
 	criticalCount = criticalCountMaster
 elif checkService == "mail":
 	serviceData = getServiceData('servermgr_mail', 'getState', 'withDetails')
-	serviceStatus, criticalCount = getServiceState(serviceData)
+	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	if not criticalCount:
 		serviceStatus = "%s " % (serviceStatus) # Keep Initial RUNNING
 		# Example Of Data Returned
@@ -512,22 +543,22 @@ elif checkService == "serverRole":
 elif checkService == "xsan":
 	# Get The initial Service State
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getState')
-	serviceStatus, criticalCount = getServiceState(serviceData)
+	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	for xsanCheck in ['getComputerProperties', 'getLUNs', 'getHistoryInfo', 'getVolumes']:
 		serviceData = getServiceData('servermgr_%s' % checkService, xsanCheck)
-		serviceStatus, criticalCount = getServiceState(serviceData)
+		serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getQuotas', name='SANVolume')
-	serviceStatus, criticalCount = getServiceState(serviceData)
+	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	sys.exit(0)
 # TODO - END
 elif checkService in osxServices:
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getState', 'withDetails')
-	serviceStatus, criticalCount = getServiceState(serviceData)
+	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	subServices = osxServices[checkService]
 	if not criticalCount:
 		# Not All Services Have Sub-Services
 		if len(subServices) > 0:
-			subServiceStatus, warningCount = getSubServiceState(subServices, serviceData, subServiceIgnore)
+			subServiceStatus, warningCount = getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
 			# Some services have sub-services that are not always there
 			# if they are there then return the sub-services-status instead
 			if subServiceStatus not in (None, ''):

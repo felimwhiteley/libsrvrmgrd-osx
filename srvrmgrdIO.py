@@ -135,7 +135,7 @@ def requestServerData(url, webuser = None, webpass = None):
       		request.add_header("Authorization", "Basic %s" % base64string)
       		request.add_header('WWW-Authenticate', 'Basic realm="Server Admin"')
 	try:
-	  	htmlFile = urllib2.urlopen(request) #, timeout=5)
+	  	htmlFile = urllib2.urlopen(request, timeout=30)
 	  	htmlData = htmlFile.read()
 	  	htmlFile.close()
 		# This bit identifies if it's leopard which adds extra unneeded info as a header
@@ -144,19 +144,15 @@ def requestServerData(url, webuser = None, webpass = None):
 			return 0, xmlDump[1]
 		else:
 			return 0, htmlData
-	except HTTPError, e:
-    		print e.code
-		print e.headers
-		return 1, [e.code, e.header]
+	except:
+		return 1, sys.exc_info()[1]
 
 def sendXML(servermgrdModule, request, server, port, webuser, webpass):
   	url = 'https://'+server+':'+port+'/commands/'+servermgrdModule+'?input='+urllib.quote(request)
 	httpError, xmlresult = requestServerData(url, webuser, webpass)
 	if httpError:
-		serverMessage = "HTTPError CODE: %s" % (xmlresult[0])
-		logMessage(serverMessage, server, port)
-		serverMessage = "HTTPError HEADER: %s" % (xmlresult[1])
-		logMessage(serverMessage, server, port)
+		logMessage(xmlresult, server, port)
+		print "ERROR: Problem Contacting Server:%s" % (xmlresult)
 		sys.exit(2)
 	xmlFauxFile = StringIO.StringIO(xmlresult)
 	return plistlib.Plist.fromFile(xmlFauxFile)
