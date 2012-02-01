@@ -401,6 +401,8 @@ def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
 					subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
 	return subServiceStatus, warningCount
 
+# Set a Default State - Stops bug at end if we never set it... - UGLY!
+serviceStatus = ""
 # Process The Service
 if checkService in ('afpUserList', 'smbUserList'):
 	dataReqCommand = 'getConnectedUsers'

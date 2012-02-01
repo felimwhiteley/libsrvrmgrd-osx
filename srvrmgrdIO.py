@@ -135,7 +135,7 @@ def requestServerData(url, webuser = None, webpass = None):
       		request.add_header("Authorization", "Basic %s" % base64string)
       		request.add_header('WWW-Authenticate', 'Basic realm="Server Admin"')
 	try:
-	  	htmlFile = urllib2.urlopen(request, timeout=30)
+	  	htmlFile = urllib2.urlopen(request) #, timeout=30)
 	  	htmlData = htmlFile.read()
 	  	htmlFile.close()
 		# This bit identifies if it's leopard which adds extra unneeded info as a header
