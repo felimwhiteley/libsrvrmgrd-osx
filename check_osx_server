@@ -71,6 +71,7 @@ if len(sys.argv) > 1:
 
 # Module Configuration
 osxServices = {
+	'addressbook' : ['requestsPerHour'],
 	'afp': ['currentConnections'],
 	'backup': [],
 	'calendar': [],
@@ -483,7 +484,7 @@ elif checkService == "mail":
 			kind = protocol['kind']
 			# TODO - Seems to be gone now...
 			#total = protocol['total']
-			active = protocol['active']
+			#active = protocol['active']
 			status = protocol['status']
 			# TODO - Taken this out for now but will plit it out into perfdata
 			#if status == 'ON' :
