@@ -5,7 +5,7 @@
 # http://svn.python.org/projects/python/trunk/Lib/plistlib.py
 #
 #
-#    Copyright (C) 2010 - 2011 Felim Whiteley
+#    Copyright (C) 2010 - 2012 Felim Whiteley
 #
 #    Author: Felim Whiteley <felimwhiteley@gmail.com>
 #             http://www.linkedin.com/in/felimwhiteley
@@ -118,7 +118,7 @@ def convertListToCsv(pythonList, sqlMode=0):
 
 def pluginUsage():
 	print "OS X Server Monitoring Tool\n\tVersion: %s" % (__version__)
-	print "\tCopyright (C) 2010 - 2011 Felim Whiteley"
+	print "\tCopyright (C) 2010 - 2012 Felim Whiteley"
 	print "\thttp://www.whiteleytech.ie"
 	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
 	print "This software is licensed under the GNU Lesser General Public License\n"
@@ -490,10 +490,14 @@ elif checkService == "mail":
 			total = protocol['total']
 			active = protocol['active']
 			status = protocol['status']
-			if status == 'ON' :
-				serviceStatus = "%s%s-%s:Act(%s)Total(%s) " % (serviceStatus, name, kind, active, total)
-			else :
-				serviceStatus = "%s%s-%s:(%s) " % (serviceStatus, name, kind, status)
+			# TODO - Taken this out for now but will plit it out into perfdata
+			#if status == 'ON' :
+			#	serviceStatus = "%s%s-%s:Act(%s)Total(%s) " % (serviceStatus, name, kind, active, total)
+			#else :
+			#	serviceStatus = "%s%s-%s:(%s) " % (serviceStatus, name, kind, status)
+			if status == 'OFF' :
+				warningCount += 1
+			serviceStatus = "%s%s:%s " % (serviceStatus, name, status)
 elif checkService in ("softwareupdates", "softwareupdatesList"):
 	patchList = []
 	normalPatches = 0
