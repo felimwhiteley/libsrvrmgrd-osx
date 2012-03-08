@@ -478,16 +478,11 @@ elif checkService == "mail":
 	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	if not criticalCount:
 		serviceStatus = "%s " % (serviceStatus) # Keep Initial RUNNING
-		# Example Of Data Returned
-		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'SMTP'}
-		# {'active': 0, 'status': 'OFF', 'kind': 'OUTGOING', 'total': 0, 'protocol': 'SMTP'}
-		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'POP3'}
-		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'IMAP'}
-		# {'active': 0, 'status': 'OFF', 'kind': 'INCOMING', 'total': 0, 'protocol': 'LISTSERVER'}
 		for protocol in serviceData['protocolsArray']:
 			name = protocol['protocol']
 			kind = protocol['kind']
-			total = protocol['total']
+			# TODO - Seems to be gone now...
+			#total = protocol['total']
 			active = protocol['active']
 			status = protocol['status']
 			# TODO - Taken this out for now but will plit it out into perfdata
@@ -495,9 +490,11 @@ elif checkService == "mail":
 			#	serviceStatus = "%s%s-%s:Act(%s)Total(%s) " % (serviceStatus, name, kind, active, total)
 			#else :
 			#	serviceStatus = "%s%s-%s:(%s) " % (serviceStatus, name, kind, status)
-			if status == 'OFF' :
+			# TODO - Use the main subService Check code
+			subServiceName = "%s-%s" % (name, kind[:3])
+			if status == 'OFF' and subServiceName not in subServiceIgnore:
 				warningCount += 1
-			serviceStatus = "%s%s:%s " % (serviceStatus, name, status)
+			serviceStatus = "%s%s:%s " % (serviceStatus, subServiceName, status)
 elif checkService in ("softwareupdates", "softwareupdatesList"):
 	patchList = []
 	normalPatches = 0
