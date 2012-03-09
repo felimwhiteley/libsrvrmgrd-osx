@@ -585,6 +585,8 @@ elif checkService in osxServices:
 else:
 	unknownCount = 1
 	serviceStatus = "ERROR:Unknown command '%s'" % (checkService)
+	# Set this to empty to stop the debug code erroring out
+	serviceData = {}
 
 # If In Debug Mode Print Out The Returned Dictionary So Can Check Values etc.
 if debugMode:
