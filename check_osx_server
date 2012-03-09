@@ -39,6 +39,10 @@ configINI = '/etc/libServerManagerDaemon.ini'
 dataFileMode = 0
 # Default To Hiding SubService Results When Ignored
 showDisabledSubServices = 0
+# Output PerfData
+perfData = 1
+# Display a master "RUNNING" for services with sub-services
+masterState = 0
 
 # Debug Logging
 def logMessage(serverMessage, serverAddress, serverPort):
@@ -180,6 +184,14 @@ try:
 		showDisabledSubServices = int(config.get("config", "showDisabledSubServices"))
 	except:
 		pass
+	try:
+		perfData = int(config.get("config", "perfData"))
+	except:
+		pass
+	try:
+		masterState = int(config.get("config", "masterState"))
+	except:
+		pass
 	configDebugMessage = "DEBUG: %s Found: dataFileMode:%s" % (configINI, dataFileMode)
 except:
 	configDebugMessage = "ERROR: %s Not Found Or Invalid" % (configINI)
@@ -311,8 +323,8 @@ def getServiceState(serviceData):
 	criticalCount = 0
 	warningCount = 0
 	unknownCount = 0
-	serviceState = serviceData['state']
 	if 'state' in serviceData:
+		serviceState = serviceData['state']
 		if serviceState in ['RUNNING', 'idle']:
 			serviceStatus = "%s" % (serviceState)
 		elif serviceState == 'UNKNOWN':
@@ -566,7 +578,10 @@ elif checkService in osxServices:
 			# Some services have sub-services that are not always there
 			# if they are there then return the sub-services-status instead
 			if subServiceStatus not in (None, ''):
-				serviceStatus = subServiceStatus
+				if masterState:
+					serviceStatus = "%s %s" % (serviceStatus, subServiceStatus)
+				else:
+					serviceStatus = subServiceStatus
 else:
 	unknownCount = 1
 	serviceStatus = "ERROR:Unknown command '%s'" % (checkService)
