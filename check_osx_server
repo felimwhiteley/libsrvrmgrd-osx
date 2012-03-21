@@ -514,6 +514,10 @@ elif checkService in ("softwareupdates", "softwareupdatesList"):
 	recommendedPatches = 0
 	restartRequired = 0
 	serviceData = getServiceData('servermgr_info', 'getSWUpdateStatus')
+	if 'swupdateStatus' not in serviceData:
+		# We have not updated our list from Apple servers yet so need to start a scan
+		serviceData = getServiceData('servermgr_info', 'startSWUpdateScan')
+		serviceData = getServiceData('servermgr_info', 'getSWUpdateStatus')
 	if 'swupdateStatus' in serviceData:
 		if 'phaseResultsArray' in serviceData['swupdateStatus']:
 			for softwareUpdate in serviceData['swupdateStatus']['phaseResultsArray']:
@@ -538,6 +542,9 @@ elif checkService in ("softwareupdates", "softwareupdatesList"):
 					restartStatus = " : [RESTART]"
 				print "%s : %skB : [%s]%s" % (swPatch['swPatch'], swPatch['sizeInKB'], swPatch['productKey'], restartStatus)
 	else:
+		serviceStatus = "ERROR:Unknown command '%s'" % (checkService)
+		# Set this to empty to stop the debug code erroring out
+		serviceData = {}
 		unknownCount += 1
 elif checkService == "serverRole":
 	serviceData = getServiceData('servermgr_info', 'getState', 'withDetails')
