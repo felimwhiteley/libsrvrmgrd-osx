@@ -426,13 +426,11 @@ def xraidStatus(profileData):
 						# Get The Section Indent
 						keyIndent = getIndent(raidData[i]) # 6 or 8
 						firstIndent = getIndent(raidData[i+1]) # 10 or 12
-						print "KEY: %s (%s)" % (raidData[i], keyIndent)
 						i, raidStatus[raidKey] = getSubNode(i, raidData, keyIndent, firstIndent)
 					else:
 						i+= 1
 				else:
 					# If the line starts with a non-whiespace then we have ended the Raid block
-					print "[BREAK] %s" % raidData[i]
 					break
 			# Exit as we've processed the raid card by now
 			break
@@ -655,15 +653,43 @@ elif checkService == "xsan":
 # TODO - END
 elif checkService == "xserveraid":
 	# From testing all Xserves don't consistantly have the profile mode
-	#serviceData = getServiceData('servermgr_xserve', 'profile')
-	import pickle
-	serviceData = pickle.load(open('../testingClients/xserveRaid.dat', 'rb'))
+	serviceData = getServiceData('servermgr_xserve', 'profile')
+	# TODO
+	#import pickle
+	#serviceData = pickle.load(open('../testingClients/xserveRaid.dat', 'rb'))
+	# TODO END
 	# Check Valid Data
 	if "Profile" in serviceData.keys():
 		raidStatus = xraidStatus(serviceData['Profile'])
-		for key in raidStatus.keys():
-			print "~~~ %s ~~~" % key
-			print raidStatus[key]
+		if 'Battery Info' in raidStatus.keys():
+			batteryState = raidStatus['Battery Info']['State']
+			if batteryState != 'Working battery':
+				criticalCount += 1
+			serviceStatus += "Battery:'%s' " % (batteryState)
+		if 'RAID Sets' in raidStatus.keys():
+			for raidSet, raidSetInfo in raidStatus['RAID Sets'].iteritems():
+				raidSetState = raidSetInfo['Status']
+				if raidSetState != 'Viable (Good)':
+					criticalCount += 1
+				serviceStatus += "RaidSet(%s):'%s' " % (raidSet, raidSetState)
+		if 'Volumes' in raidStatus.keys():
+			for volName, volInfo in raidStatus['Volumes'].iteritems():
+				volDegraded = volInfo['Status']['Degraded']
+				if volDegraded != 'No':
+					volState = 'Degraded'
+					criticalCount += 1
+				else:
+					volState = "OK"
+				serviceStatus += "Volume(%s):'%s' " % (volName, volState)
+		if 'Drives' in raidStatus.keys():
+			for driveName, driveInfo in raidStatus['Drives'].iteritems():
+				driveFailed = driveInfo['Status']['Failed']
+				if driveFailed != 'No':
+					driveState = 'Failed'
+					criticalCount += 1
+				else:
+					driveState = "OK"
+				serviceStatus += "Drive(%s):'%s' " % (driveName, driveState)
 	else:
 		criticalCount = 1
 		serviceStatus = "ERROR:Unable To Retrieve Information"
