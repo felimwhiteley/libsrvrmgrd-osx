@@ -30,7 +30,7 @@
 
 import pickle, srvrmgrdIO, subprocess, sys, time
 
-__version__ = "0.6.4-pre-1"
+__version__ = "0.6.5-pre1"
 
 configINI = '/etc/libServerManagerDaemon.ini'
 
@@ -128,6 +128,7 @@ def pluginUsage():
 	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
 	print "This software is licensed under the GNU Lesser General Public License\n"
 	print "USAGE: check_osx_server SERVICENAME ADDRESS PORT USER PASSWORD [Optional Sub-Service Ignore List]"
+	print ""
 	print "\t--------\t------------"
 	print "\tServices\tSub-Services"
 	print "\t--------\t------------"
@@ -144,9 +145,11 @@ def pluginUsage():
 		else:
 			print "\t%s%s%s" % (serviceName, txtTabs, convertListToCsv(subServiceList))
 	print "\tsoftwareupdates\t-" #"-NO SUB-SERVICES AVAILABLE--"
+	print "\txserveraid\t-" #"-NO SUB-SERVICES AVAILABLE--"
 	print "\nWhen adding Sub-Service ignore values they should be the last argument, seperated by commas and contain no whitespace"
 	print "\nEXAMPLE: check_osx_server jabber 172.16.12.1 311 admin_user admin_user_password mucState,proxyState\n"
-	print "\tmucState & proxyState will be ignored and will not trigger a warning\n"
+	print "\tmucState & proxyState will be ignored and will not trigger a warning"
+	print ""
 	print "-----------"
 	print "System Load"
 	print "-----------"
@@ -157,7 +160,8 @@ def pluginUsage():
 	print "\thddUsage\t\tView Percentage Of HDD Used On All Drives"
 	print "\tsysUsage\t\tCombined View Of All Of The Above\n"
 	print "\t\tThe WARN_THRESHOLD & CRIT_THRESHOLD are optional and default to 80% & 90% respectivly"
-	print "\t\t(If you do use your own values you must use both or it will trigger an error) \n"
+	print "\t\t(If you do use your own values you must use both or it will trigger an error)"
+	print ""
 	print "------------------"
 	print "Informational Mode"
 	print "------------------"
@@ -167,6 +171,14 @@ def pluginUsage():
 	print "\tsmbUserList\t\tView User(s) Connected Via SMB"
 	print "\tserverRole\t\tList The Roles & Services Configured"
 	print "\tsoftwareupdatesList\tList All Updates Required By The Server"
+	print ""
+	print "--------"
+	print "Dev Mode"
+	print "--------"
+	print "USAGE: check_osx_server DEVMODE ADDRESS PORT USER PASSWORD"
+	print "\nDEVMODES:"
+	print "\tLIST\t\tView The Modules We Can Probe And Highlight Which Are Active On The Host"
+	print "\tLISTDETAILS\tAlso Shows The SubServices Per Module"
 	print ""
 	sys.exit(0)
 
@@ -281,9 +293,11 @@ elif len(sys.argv) >= 6:
 else:
 	pluginUsage()
 
+
 warningCount = 0
 criticalCount = 0
 unknownCount = 0
+
 
 def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataReqTimescale=None, dataReqIdentifier=None, dataReqOffset=None, dataReqAmount=None):
 	# TEST Mode - This will be moving somewhere else
@@ -317,6 +331,7 @@ def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataRe
 		serviceData = srvrmgrdIO.sendXML(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword)
 	return serviceData
 
+
 def getServiceState(serviceData):
 	# Set some intial values
 	serviceStatus = ""
@@ -336,6 +351,7 @@ def getServiceState(serviceData):
 		serviceStatus = "UNKNOWN: Invalid Data Returned From Service Check"
 		unknownCount += 1
 	return serviceStatus, criticalCount, warningCount, unknownCount
+
 
 def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
 	# Debug Output
@@ -361,6 +377,80 @@ def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
 		print "ERROR: Warning & Critical Levels Are The Same"
 		sys.exit(1)
 	return warningCount, criticalCount
+
+
+def getIndent(lineOfText):
+	whiteSpace = 0
+	for char in lineOfText:
+		if char == ' ':
+			whiteSpace += 1
+		else:
+			break
+	return whiteSpace
+
+
+def getSubNode(i, raidData, keyIndent, firstIndent):
+	raidStatus = {}
+	nextKeyIndent = firstIndent
+	while nextKeyIndent >= firstIndent:
+		i += 1
+		currentKeyIndent = getIndent(raidData[i])
+		nextKeyIndent = getIndent(raidData[i+1])
+		itemData = raidData[i].lstrip().rstrip().split(':')
+		if itemData[1] == '':
+			i, raidStatus[itemData[0]] = getSubNode(i, raidData, currentKeyIndent, nextKeyIndent)
+			currentKeyIndent = getIndent(raidData[i])
+			nextKeyIndent = getIndent(raidData[i+1])
+		else:
+			raidStatus[itemData[0]] = itemData[1].lstrip().rstrip()
+	return i, raidStatus
+
+
+def xraidStatus(profileData):
+	i = 0
+	profileData = profileData.split('\n')
+	# Strip blank items...
+	raidData = [item for item in profileData if item != '']
+	raidStatus = {}
+	# Keywords
+	raidKeys = ['Battery Info', 'Drives', 'RAID Sets', 'Volumes']
+	# Parse Card Info First
+	while i < len(raidData):
+		if raidData[i] == 'Hardware RAID:':
+			i += 1
+			raidCardDetected = 1
+			while i < len(raidData):
+				if raidData[i][0] == ' ':
+					raidKey = raidData[i].lstrip().rstrip(':')
+					if raidKey in raidKeys:
+						# Get The Section Indent
+						keyIndent = getIndent(raidData[i]) # 6 or 8
+						firstIndent = getIndent(raidData[i+1]) # 10 or 12
+						print "KEY: %s (%s)" % (raidData[i], keyIndent)
+						i, raidStatus[raidKey] = getSubNode(i, raidData, keyIndent, firstIndent)
+					else:
+						i+= 1
+				else:
+					# If the line starts with a non-whiespace then we have ended the Raid block
+					print "[BREAK] %s" % raidData[i]
+					break
+			# Exit as we've processed the raid card by now
+			break
+		i+= 1
+	return raidStatus
+'''
+i += 1
+itemIndent = getIndent(raidData[i])
+nextIndent = getIndent(raidData[i+1])
+print itemIndent, nextIndent
+if nextIndent > itemIndent:
+	subItem = raidData[i].lstrip().rstrip(':')
+	print "[SubItem] '%s'" % (subItem)
+	raidStatus[raidKey][subItem] = {}
+raidKey = raidData[i].lstrip().rstrip(':')
+if raidKey in raidKeys:
+	break
+'''
 
 def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore):
 	subServiceStatus = ""
@@ -413,6 +503,7 @@ def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
 				if displaySubService:
 					subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
 	return subServiceStatus, warningCount
+
 
 # Set a Default State - Stops bug at end if we never set it... - UGLY!
 serviceStatus = ""
@@ -574,6 +665,20 @@ elif checkService == "xsan":
 	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)
 	sys.exit(0)
 # TODO - END
+elif checkService == "xserveraid":
+	# From testing all Xserves don't consistantly have the profile mode
+	#serviceData = getServiceData('servermgr_xserve', 'profile')
+	import pickle
+	serviceData = pickle.load(open('../testingClients/xserveRaid.dat', 'rb'))
+	# Check Valid Data
+	if "Profile" in serviceData.keys():
+		raidStatus = xraidStatus(serviceData['Profile'])
+		for key in raidStatus.keys():
+			print "~~~ %s ~~~" % key
+			print raidStatus[key]
+	else:
+		criticalCount = 1
+		serviceStatus = "ERROR:Unable To Retrieve Information"
 elif checkService in osxServices:
 	serviceData = getServiceData('servermgr_%s' % checkService, 'getState', 'withDetails')
 	serviceStatus, criticalCount, warningCount, unknownCount = getServiceState(serviceData)

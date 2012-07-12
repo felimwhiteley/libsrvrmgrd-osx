@@ -47,7 +47,7 @@ osxServices = {
 
 def usageError():
 	print "OS X Server Monitoring Tool Event Handler"
-	print "\tCopyright (C) 2010-2011 Felim Whiteley"
+	print "\tCopyright (C) 2010-2012 Felim Whiteley"
 	print "\thttp://code.google.com/p/libsrvrmgrd-osx/"
 	print "This software is licensed under the GNU Lesser General Public License\n"
 	print "ERROR:\tosx_server_event_handler SERVICE STATUS STATUS_TYPE ATTEMPT_NUMBER ADDRESS PORT USER PASSWORD"
