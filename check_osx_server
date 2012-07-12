@@ -438,19 +438,7 @@ def xraidStatus(profileData):
 			break
 		i+= 1
 	return raidStatus
-'''
-i += 1
-itemIndent = getIndent(raidData[i])
-nextIndent = getIndent(raidData[i+1])
-print itemIndent, nextIndent
-if nextIndent > itemIndent:
-	subItem = raidData[i].lstrip().rstrip(':')
-	print "[SubItem] '%s'" % (subItem)
-	raidStatus[raidKey][subItem] = {}
-raidKey = raidData[i].lstrip().rstrip(':')
-if raidKey in raidKeys:
-	break
-'''
+
 
 def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore):
 	subServiceStatus = ""
