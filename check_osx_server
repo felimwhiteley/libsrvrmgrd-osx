@@ -669,8 +669,10 @@ elif checkService == "xserveraid":
 		if 'RAID Sets' in raidStatus.keys():
 			for raidSet, raidSetInfo in raidStatus['RAID Sets'].iteritems():
 				raidSetState = raidSetInfo['Status']
-				if raidSetState != 'Viable (Good)':
-					criticalCount += 1
+				if raidSetState == 'Viable (In transition)':
+					warningCount += 1
+				elif raidSetState != 'Viable (Good)':
+                    criticalCount += 1
 				serviceStatus += "RaidSet(%s):'%s' " % (raidSet, raidSetState)
 		if 'Volumes' in raidStatus.keys():
 			for volName, volInfo in raidStatus['Volumes'].iteritems():
