@@ -181,8 +181,8 @@ def buildDataFile(servermgrdModule, request, server, port, webuser, webpass, deb
             serverMessage = " DEBUG: DataFile Already Exists"
             logMessage(serverMessage, server, port)
         filemodtime = os.path.getmtime(ServerDataFile)
-            differance = now - filemodtime
-            if differance > 300 :
+        differance = now - filemodtime
+        if differance > 300 :
             if debugMode:
                 serverMessage = " DEBUG: DataFile Over 300 Seconds Old -> Getting Fresh Data"
                 logMessage(serverMessage, server, port)

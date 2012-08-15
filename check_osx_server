@@ -9,7 +9,7 @@
 #
 #    Author: Felim Whiteley <felimwhiteley@gmail.com>
 #             http://www.linkedin.com/in/felimwhiteley
-#	      http://www.whiteleytech.ie
+#	          http://www.whiteleytech.ie
 #
 #
 #    This is free software; you can redistribute it and/or modify it
@@ -40,7 +40,8 @@ dataFileMode = 0
 # Default To Hiding SubService Results When Ignored
 showDisabledSubServices = 0
 # Output PerfData
-perfData = 1
+displayPerfData = 1
+perfData = ""
 # Display a master "RUNNING" for services with sub-services
 masterState = 0
 
@@ -106,19 +107,19 @@ osxServices = {
 }
 
 def convertListToCsv(pythonList, sqlMode=0):
-        csvString = ''
-        for listItem in pythonList:
-                if csvString == '':
+    csvString = ''
+    for listItem in pythonList:
+        if csvString == '':
             if sqlMode:
                 csvString = "'%s'" % listItem
             else:
                 csvString = "%s" % listItem
-                else:
+        else:
             if sqlMode:
                 csvString = "%s,'%s'" % (csvString, listItem)
             else:
                 csvString = "%s,%s" % (csvString, listItem)
-        return csvString
+    return csvString
 
 
 def pluginUsage():
@@ -197,7 +198,7 @@ try:
     except:
         pass
     try:
-        perfData = int(config.get("config", "perfData"))
+        displayPerfData = int(config.get("config", "displayPerfData"))
     except:
         pass
     try:
@@ -508,7 +509,7 @@ if checkService in ('afpUserList', 'smbUserList'):
         if userCount:
             print userList
         serviceStatus = "Connections:%s" % (userCount)
-elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
+elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netUsage'):
     dataReqCommand = 'getHardwareInfo'
     serviceData = getServiceData('servermgr_info', dataReqCommand, '')
     serviceStatus = ''
@@ -517,11 +518,16 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
     warningCountMaster = 0
     criticalCountMaster = 0
     # It's optional to provide the thresholds but must provide both if you do
+    # Add new offset when we have perDisk requests
+    if checkService == "hddUsageDrive":
+        perDiskOffset = 1
+    else:
+        perDiskOffset = 0
     if len(sys.argv) > (6 + debugMode):
         # Must Have Both Warn And Crit Set
-        if len(sys.argv) == (8 + debugMode):
-            warnLevel = int(sys.argv[6 + debugMode])
-            critLevel = int(sys.argv[7 + debugMode])
+        if len(sys.argv) == (8 + debugMode + perDiskOffset):
+            warnLevel = int(sys.argv[6 + debugMode + perDiskOffset])
+            critLevel = int(sys.argv[7 + debugMode + perDiskOffset])
         else:
             print "ERROR: Incorrect Number Of Arguments"
             sys.exit(1)
@@ -534,6 +540,7 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
         warningCountMaster += warningCount
         criticalCountMaster += criticalCount
         serviceStatus += "cpuUsage:%s%% " % (sensorReading)
+        perfData += "cpuUsage=%s;;;;; " % (sensorReading)
     if checkService in ('sysUsage', 'netUsage'):
         sensorReading = int(serviceData['networkThroughputBy1K'])
         # If no threshold set then we don't check becasue no precentage calculation possible with network
@@ -542,12 +549,14 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'netUsage'):
         warningCountMaster += warningCount
         criticalCountMaster += criticalCount
         serviceStatus += "netUsage:%skb/s " % (sensorReading)
-    if checkService in ('sysUsage', 'hddUsage'):
+        perfData += "netUsage=%s;;;;; " % (sensorReading)
+    if checkService in ('sysUsage', 'hddUsage', 'hddUsageDrive'):
         hddStatus = ""
         for hddInfo in serviceData['volumeInfosArray']:
             hddName = hddInfo['name']
             totalBytes = float(hddInfo['totalBytes'])
             freeBytes = float(hddInfo['freeBytes'])
+            perfData += "totalBytes.%s=%s;;;;; freeBytes.%s=%s;;;;; " % (hddName, hddInfo['totalBytes'], hddName, hddInfo['freeBytes'])
             usedBytes = float(totalBytes-freeBytes)
             hddUsagePercentage = int((usedBytes/totalBytes) * 100)
             # If Thresholds Are Set else use defaults of 80 & 90
@@ -735,7 +744,10 @@ if debugMode:
 #              specified operation. Higher-level errors (such as name resolution
 #              errors, socket timeouts, etc) are outside of the control of
 #              plugins and should generally NOT be reported as UNKNOWN states.)
-print serviceStatus
+if displayPerfData:
+    print serviceStatus + "|" + perfData
+else:
+    print serviceStatus
 if criticalCount:
         sys.exit(2)
 elif warningCount:
