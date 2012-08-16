@@ -41,6 +41,8 @@ dataFileMode = 0
 showDisabledSubServices = 0
 # Output PerfData
 displayPerfData = 1
+# Performance Data
+# 'label'=value[UOM];[warn];[crit];[min];[max]
 perfData = ""
 # Display a master "RUNNING" for services with sub-services
 masterState = 0
@@ -355,6 +357,7 @@ def getServiceState(serviceData):
 
 
 def getServiceThreshold(sensorReading, warnLevel=80, critLevel=90):
+    # Convert to INT : We may have had comma seperated list of 2 thresholds
     # Debug Output
     if debugMode:
         serverMessage = "#### getServiceThreshold####\nsensorReading: %s\nwarnLevel: %s\ncritLevel: %s" % (sensorReading, warnLevel, critLevel)
@@ -492,6 +495,25 @@ def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
     return subServiceStatus, warningCount
 
 
+def convertToBytes(humanisedBytes):
+    humanisedBytes = str(humanisedBytes)
+    if humanisedBytes[-1].isdigit():
+        return int(humanisedBytes)
+    else:
+        if humanisedBytes[-1] == "B":
+            return int(humanisedBytes[:-1])
+        elif humanisedBytes[-1] == "K":
+            return int(humanisedBytes[:-1])*1024
+        elif humanisedBytes[-1] == "M":
+            return int(humanisedBytes[:-1])*(1024**2)
+        elif humanisedBytes[-1] == "G":
+            return int(humanisedBytes[:-1])*(1024**3)
+        elif humanisedBytes[-1] == "T":
+            return int(humanisedBytes[:-1])*(1024**4)
+        elif humanisedBytes[-1] == "P":
+            return int(humanisedBytes[:-1])*(1024**5)
+
+
 # Set a Default State - Stops bug at end if we never set it... - UGLY!
 serviceStatus = ""
 # Process The Service
@@ -523,11 +545,11 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
         perDiskOffset = 1
     else:
         perDiskOffset = 0
-    if len(sys.argv) > (6 + debugMode):
+    if len(sys.argv) > (6 + debugMode + perDiskOffset):
         # Must Have Both Warn And Crit Set
         if len(sys.argv) == (8 + debugMode + perDiskOffset):
-            warnLevel = int(sys.argv[6 + debugMode + perDiskOffset])
-            critLevel = int(sys.argv[7 + debugMode + perDiskOffset])
+            warnLevel = sys.argv[6 + debugMode + perDiskOffset]
+            critLevel = sys.argv[7 + debugMode + perDiskOffset]
         else:
             print "ERROR: Incorrect Number Of Arguments"
             sys.exit(1)
@@ -554,15 +576,28 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
         hddStatus = ""
         for hddInfo in serviceData['volumeInfosArray']:
             hddName = hddInfo['name']
-            totalBytes = float(hddInfo['totalBytes'])
-            freeBytes = float(hddInfo['freeBytes'])
-            perfData += "totalBytes.%s=%s;;;;; freeBytes.%s=%s;;;;; " % (hddName, hddInfo['totalBytes'], hddName, hddInfo['freeBytes'])
-            usedBytes = float(totalBytes-freeBytes)
-            hddUsagePercentage = int((usedBytes/totalBytes) * 100)
+            # When running in 1-Disk only mode
+            if checkService == 'hddUsageDrive' and sys.argv[6 + debugMode] != hddName:
+                continue
+            usedBytes = hddInfo['totalBytes'] - hddInfo['freeBytes']
+            perfData += "'totalBytes.%s'=%s;;;;; 'freeBytes.%s'=%s;;;;; 'usedBytes.%s'=%s;;;;; " % (hddName.replace('"', ''), hddInfo['totalBytes'], hddName.replace('"', ''), hddInfo['freeBytes'], hddName.replace('"', ''), usedBytes)
+            hddUsagePercentage = int((float(usedBytes)/float(hddInfo['totalBytes'])) * 100)
             # If Thresholds Are Set else use defaults of 80 & 90
             hddStatus += "'%s':%s%% " % (hddName, hddUsagePercentage)
             if warnLevel and critLevel:
-                warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel, critLevel)
+                # Check for Thresholds set with 80,123123123 format
+                # ie. percentage,bytes
+                # Must have both warn & crit in non-percent mode otherwise be comparing
+                # a warn of % and crit of non-% which would be very messy
+                if len(warnLevel.split(',')) > 1 and len(critLevel.split(',')) > 1:
+                    warningCount, criticalCount = getServiceThreshold(usedBytes, convertToBytes(warnLevel.split(',')[1]), convertToBytes(critLevel.split(',')[1]))
+                    warningCountMaster += warningCount
+                    criticalCountMaster += criticalCount
+                # Check if a non-percent only threshold
+                if not warnLevel.split(',')[0][-1].isdigit() and not critLevel.split(',')[0][-1].isdigit():
+                    warningCount, criticalCount = getServiceThreshold(usedBytes, convertToBytes(warnLevel.split(',')[0]), convertToBytes(critLevel.split(',')[0]))
+                else:
+                    warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel.split(',')[0], critLevel.split(',')[0])
                 warningCountMaster += warningCount
                 criticalCountMaster += criticalCount
             else:
