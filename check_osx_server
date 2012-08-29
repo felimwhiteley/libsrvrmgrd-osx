@@ -277,6 +277,7 @@ elif len(sys.argv) >= 6:
     else:
         subServiceIgnore = []
     if debugMode:
+        logMessage("++++++++++++++++ START ++++++++++++++++++\n", serverAddress, serverPort)
         if configDebugMessage:
             # Send Config Parse Message to Log
             logMessage(configDebugMessage, serverAddress, serverPort)
@@ -541,8 +542,28 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
     criticalCountMaster = 0
     # It's optional to provide the thresholds but must provide both if you do
     # Add new offset when we have perDisk requests
+    perDiskName = ''
     if checkService == "hddUsageDrive":
         perDiskOffset = 1
+        # Drive Name With Space In it wrapped In double quotes
+        if sys.argv[6 + debugMode][0] == '"':
+            i = 6 + debugMode
+            perDiskName = sys.argv[i]
+            while i < len(sys.argv):
+                if sys.argv[i][-1] == '"':
+                    break
+                else:
+                    # We use more than one argv for the name so need to pass the arg count check
+                    perDiskOffset += 1
+                    i += 1
+                    try:
+                        perDiskName += "%s %s" % (perDiskName, sys.argv[i])
+                    except:
+                        print "ERROR: Non-Matching Quotes On DriveName"
+                        sys.exit(1)
+            perDiskName = perDiskName.lstrip('"').rstrip('"')
+        else:
+            perDiskName = sys.argv[6 + debugMode]
     else:
         perDiskOffset = 0
     if len(sys.argv) > (6 + debugMode + perDiskOffset):
@@ -577,8 +598,11 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
         for hddInfo in serviceData['volumeInfosArray']:
             hddName = hddInfo['name']
             # When running in 1-Disk only mode
-            if checkService == 'hddUsageDrive' and sys.argv[6 + debugMode] != hddName:
-                continue
+            if checkService == 'hddUsageDrive':
+                if debugMode:
+                    logMessage("perDiskName='%s' hddName='%s'" % (perDiskName, hddName), serverAddress, serverPort)
+                if perDiskName != hddName:
+                    continue
             usedBytes = hddInfo['totalBytes'] - hddInfo['freeBytes']
             perfData += "'totalBytes.%s'=%s;;;;; 'freeBytes.%s'=%s;;;;; 'usedBytes.%s'=%s;;;;; " % (hddName.replace('"', ''), hddInfo['totalBytes'], hddName.replace('"', ''), hddInfo['freeBytes'], hddName.replace('"', ''), usedBytes)
             hddUsagePercentage = int((float(usedBytes)/float(hddInfo['totalBytes'])) * 100)
