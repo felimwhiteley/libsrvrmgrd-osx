@@ -157,13 +157,24 @@ def pluginUsage():
     print "System Load"
     print "-----------"
     print "USAGE: check_osx_server SYSTEMSTAT ADDRESS PORT USER PASSWORD WARN_THRESHOLD CRIT_THRESHOLD"
+    print "\n\tThe WARN_THRESHOLD & CRIT_THRESHOLD are optional and default to 80% & 90% respectivly"
+    print "\t(If you do use your own values you must use both or it will trigger an error)"
+    print "\tYou can also specify values in K, M, G, T & P values, either in combination with"
+    print "\tpercentage or in comma seperated list where you might have hard limits for certain drives"
     print "\nSYSTEMSTAT:"
     print "\tcpuUsage\t\tView Percentage Of Aggregated CPU(s) & Cores Used"
     print "\tnetUsage\t\tView The Overall Kilobits/Second Network Usage"
     print "\thddUsage\t\tView Percentage Of HDD Used On All Drives"
-    print "\tsysUsage\t\tCombined View Of All Of The Above\n"
-    print "\t\tThe WARN_THRESHOLD & CRIT_THRESHOLD are optional and default to 80% & 90% respectivly"
-    print "\t\t(If you do use your own values you must use both or it will trigger an error)"
+    print "\tsysUsage\t\tCombined View Of All Of The Above"
+    print "\t\tExample:"
+    print """\t\t\t./check_osx_server hddUsage 192.168.1.10 311 admin_user admin_password"""
+    print """\t\t\t./check_osx_server hddUsage 192.168.1.10 311 admin_user admin_password 87 92"""
+    print ""
+    print "\thddUsageDrive\t\tView Percentage Of HDD Used On A Specific Drive"
+    print "\t\tExample:"
+    print """\t\t\t./check_osx_server hddUsageDrive 192.168.1.10 311 admin_user admin_password "Promise RAID" 80,100G 90,200G"""
+    print "\t\tNote:"
+    print """\t\t\tThe drive name should be wrapped in " " if there is whitespace in the name as the above example"""
     print ""
     print "------------------"
     print "Informational Mode"
@@ -310,9 +321,9 @@ def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataRe
             # XGrid test Data
             serviceData = {'servicePortsAreRestricted': 'NO', 'servicePortsRestrictionInfo': [], 'state': 'RUNNING', 'readWriteSettingsVersion': 1, 'startedTime': '', 'setStateVersion': 1, 'command': 'getState', 'controllerStatus': {'status': 'OK', 'workingCPUPower': '5'}, 'logPaths': {'xgridSystemLog': '/var/log/system.log', 'xgridAgentLog': '/Library/Logs/Xgrid/xgridagentd.log', 'xgridControllerLog': '/Library/Logs/Xgrid/xgridcontrollerd.log'}, 'agentStatus': {'status': 'STOPPED', 'activeCPUPower': '1'}}
             return serviceData
-        elif servermgrdModule == "" and dataReqCommand == "getHardwareInfo":
+        elif servermgrdModule == "servermgr_info" and dataReqCommand == "getHardwareInfo":
             # hddStatus, cpuUsage etc.
-            serviceData = {'cpuUsageBy100': 315, 'volumeInfosArray': [{'totalBytes': 161061273600, 'name': 'ServerHD', 'freeBytes': 146084642816}, {'totalBytes': 161061273600, 'name': 'NetBootHD', 'freeBytes': 107296305152}, {'totalBytes': 1177566953472, 'name': 'SnapshotHD', 'freeBytes': 472142860288}, {'totalBytes': 2450234761216, 'name': 'BackupHD', 'freeBytes': 386296975360}, {'totalBytes': 549411840000, 'name': 'DataHD', 'freeBytes': 157978660864}], 'networkThroughputBy1K': 655, 'cpuUsagesBy100Array': [{'cpuUsage-0': 903}, {'cpuUsage-1': 13}, {'cpuUsage-2': 682}, {'cpuUsage-3': 11}, {'cpuUsage-4': 550}, {'cpuUsage-5': 10}, {'cpuUsage-6': 343}, {'cpuUsage-7': 6}], 'command': 'getHardwareInfo', 'networkThroughput': 671107}
+            serviceData = {'cpuUsageBy100': 315, 'volumeInfosArray': [{'totalBytes': 161061273600, 'name': 'ServerHD', 'freeBytes': 146084642816}, {'totalBytes': 161061273600, 'name': 'Net Boot HD', 'freeBytes': 107296305152}, {'totalBytes': 1177566953472, 'name': 'SnapshotHD', 'freeBytes': 472142860288}, {'totalBytes': 2450234761216, 'name': 'BackupHD', 'freeBytes': 386296975360}, {'totalBytes': 549411840000, 'name': 'DataHD', 'freeBytes': 157978660864}], 'networkThroughputBy1K': 655, 'cpuUsagesBy100Array': [{'cpuUsage-0': 903}, {'cpuUsage-1': 13}, {'cpuUsage-2': 682}, {'cpuUsage-3': 11}, {'cpuUsage-4': 550}, {'cpuUsage-5': 10}, {'cpuUsage-6': 343}, {'cpuUsage-7': 6}], 'command': 'getHardwareInfo', 'networkThroughput': 671107}
             return serviceData
         else:
             print "TEST NOT AVAILABLE: '%s'" % servermgrdModule
