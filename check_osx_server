@@ -30,7 +30,7 @@
 
 import pickle, srvrmgrdIO, subprocess, sys, time
 
-__version__ = "0.6.5-pre1"
+__version__ = "0.6.5"
 
 configINI = '/etc/libServerManagerDaemon.ini'
 
@@ -46,6 +46,8 @@ displayPerfData = 1
 perfData = ""
 # Display a master "RUNNING" for services with sub-services
 masterState = 0
+# Bytes usually stored as 1024, can be 1000 in metric byte values
+byteBase = 1024
 
 # Debug Logging
 def logMessage(serverMessage, serverAddress, serverPort):
@@ -216,6 +218,10 @@ try:
         pass
     try:
         masterState = int(config.get("config", "masterState"))
+    except:
+        pass
+    try:
+        byteBase = int(config.get("config", "byteBase"))
     except:
         pass
     configDebugMessage = "DEBUG: %s Found: dataFileMode:%s" % (configINI, dataFileMode)
@@ -515,15 +521,37 @@ def convertToBytes(humanisedBytes):
         if humanisedBytes[-1] == "B":
             return int(humanisedBytes[:-1])
         elif humanisedBytes[-1] == "K":
-            return int(humanisedBytes[:-1])*1024
+            return int(humanisedBytes[:-1])*byteBase
         elif humanisedBytes[-1] == "M":
-            return int(humanisedBytes[:-1])*(1024**2)
+            return int(humanisedBytes[:-1])*(byteBase**2)
         elif humanisedBytes[-1] == "G":
-            return int(humanisedBytes[:-1])*(1024**3)
+            return int(humanisedBytes[:-1])*(byteBase**3)
         elif humanisedBytes[-1] == "T":
-            return int(humanisedBytes[:-1])*(1024**4)
+            return int(humanisedBytes[:-1])*(byteBase**4)
         elif humanisedBytes[-1] == "P":
-            return int(humanisedBytes[:-1])*(1024**5)
+            return int(humanisedBytes[:-1])*(byteBase**5)
+
+
+def humaniseBytes(numberInBytes):
+    numberInBytes = str(numberInBytes)
+    if len(numberInBytes) > 15:
+        humanisedNumber = int(int(numberInBytes)/(byteBase**5))
+        humanisedNumber = "%sPB" % (humanisedNumber)
+    if len(numberInBytes) > 12:
+        humanisedNumber = int(int(numberInBytes)/(byteBase**4))
+        humanisedNumber = "%sTB" % (humanisedNumber)
+    elif len(numberInBytes) > 9:
+        humanisedNumber = int(int(numberInBytes)/(byteBase**3))
+        humanisedNumber = "%sGB" % (humanisedNumber)
+    elif len(numberInBytes) > 6:
+        humanisedNumber = int(int(numberInBytes)/(byteBase**2))
+        humanisedNumber = "%sMB" % (humanisedNumber)
+    elif len(numberInBytes) > 3:
+        humanisedNumber = int(int(numberInBytes)/(byteBase))
+        humanisedNumber = "%skB" % (humanisedNumber)
+    else:
+        humanisedNumber = "%sB" % (numberInBytes)
+    return humanisedNumber
 
 
 # Set a Default State - Stops bug at end if we never set it... - UGLY!
@@ -587,9 +615,9 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
             sys.exit(1)
     if checkService in ('sysUsage', 'cpuUsage'):
         sensorReading = int(serviceData['cpuUsageBy100']/100)
-        if warnLevel and critLevel:
+        if (warnLevel and critLevel) and checkService != 'sysUsage':
             warningCount, criticalCount = getServiceThreshold(sensorReading, warnLevel, critLevel)
-        else:
+        elif checkService != 'sysUsage':
             warningCount, criticalCount = getServiceThreshold(sensorReading)
         warningCountMaster += warningCount
         criticalCountMaster += criticalCount
@@ -598,7 +626,7 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
     if checkService in ('sysUsage', 'netUsage'):
         sensorReading = int(serviceData['networkThroughputBy1K'])
         # If no threshold set then we don't check becasue no precentage calculation possible with network
-        if warnLevel and critLevel:
+        if (warnLevel and critLevel) and checkService != 'sysUsage':
             warningCount, criticalCount = getServiceThreshold(sensorReading, warnLevel, critLevel)
         warningCountMaster += warningCount
         criticalCountMaster += criticalCount
@@ -615,11 +643,11 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
                 if perDiskName != hddName:
                     continue
             usedBytes = hddInfo['totalBytes'] - hddInfo['freeBytes']
-            perfData += "'totalBytes.%s'=%s;;;;; 'freeBytes.%s'=%s;;;;; 'usedBytes.%s'=%s;;;;; " % (hddName.replace('"', ''), hddInfo['totalBytes'], hddName.replace('"', ''), hddInfo['freeBytes'], hddName.replace('"', ''), usedBytes)
+            perfData += "totalBytes.%s=%s;;;;; freeBytes.%s=%s;;;;; usedBytes.%s=%s;;;;; " % (hddName.replace('"', ''), hddInfo['totalBytes'], hddName.replace('"', ''), hddInfo['freeBytes'], hddName.replace('"', ''), usedBytes)
             hddUsagePercentage = int((float(usedBytes)/float(hddInfo['totalBytes'])) * 100)
             # If Thresholds Are Set else use defaults of 80 & 90
             hddStatus += "'%s':%s%% " % (hddName, hddUsagePercentage)
-            if warnLevel and critLevel:
+            if (warnLevel and critLevel) and checkService != 'sysUsage':
                 # Check for Thresholds set with 80,123123123 format
                 # ie. percentage,bytes
                 # Must have both warn & crit in non-percent mode otherwise be comparing
@@ -635,11 +663,14 @@ elif checkService in ('sysUsage', 'cpuUsage', 'hddUsage', 'hddUsageDrive', 'netU
                     warningCount, criticalCount = getServiceThreshold(hddUsagePercentage, warnLevel.split(',')[0], critLevel.split(',')[0])
                 warningCountMaster += warningCount
                 criticalCountMaster += criticalCount
-            else:
+            elif checkService != 'sysUsage':
                 warningCount, criticalCount = getServiceThreshold(hddUsagePercentage)
                 warningCountMaster += warningCount
                 criticalCountMaster += criticalCount
-        serviceStatus += "hddUsage:[%s] " % (hddStatus.rstrip())
+        if checkService == 'hddUsageDrive':
+            serviceStatus = "%s %s" % (hddStatus.rstrip(), humaniseBytes(usedBytes))
+        else:
+            serviceStatus += "hddUsage:[%s] " % (hddStatus.rstrip())
     warningCount = warningCountMaster
     criticalCount = criticalCountMaster
 elif checkService == "mail":
@@ -733,10 +764,6 @@ elif checkService == "xsan":
 elif checkService == "xserveraid":
     # From testing all Xserves don't consistantly have the profile mode
     serviceData = getServiceData('servermgr_xserve', 'profile')
-    # TODO
-    #import pickle
-    #serviceData = pickle.load(open('../testingClients/xserveRaid.dat', 'rb'))
-    # TODO END
     # Check Valid Data
     if "Profile" in serviceData.keys():
         raidStatus = xraidStatus(serviceData['Profile'])
