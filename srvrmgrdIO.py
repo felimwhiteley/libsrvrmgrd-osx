@@ -154,6 +154,23 @@ def sendXML(servermgrdModule, request, server, port, webuser, webpass):
         logMessage(xmlresult, server, port)
         print "ERROR: Problem Contacting Server:%s" % (xmlresult)
         sys.exit(2)
+    # DHCP Is returning invalid XML characters in the clientID field for some hosts
+    # Rather ugly attempt to strip out the whole DHCP Lease Array
+    if servermgrdModule == "servermgr_dhcp":
+        index = 0
+        xmlData = xmlresult.split('\n')
+        xmlresult = ""
+        while index < len(xmlData):
+            if xmlData[index].lstrip() == "<key>dhcpLeasesArray</key>":
+                while index < len(xmlData):
+                    if xmlData[index].lstrip() == "</array>":
+                        index += 1
+                        break
+                    else:
+                        index += 1
+            else:
+                xmlresult += xmlData[index]
+                index += 1
     xmlFauxFile = StringIO.StringIO(xmlresult)
     try:
         return plistlib.Plist.fromFile(xmlFauxFile)
