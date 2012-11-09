@@ -1,11 +1,13 @@
-#!/usr/bin/python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 #
+# Copyright 2010 - 2012 Whiteley Tech Ltd. - http://www.whiteleytech.ie
 # Copyright 2008 Integral Arm - http://www.integralarm.com/
-# by Felim Whiteley - http://www.linkedin.com/in/felimwhiteley
+#
+# Felim Whiteley - http://www.linkedin.com/in/felimwhiteley
 # felimwhiteley -AT- gmail [DOT] com
+#
 # Original code developed by Andre LaBranche from http://www.dreness.com/
-# Version 0.6.2 - Works With Panther, Tiger and Leopard
-# (Other Version may also work but have not been tested)
 #
 # -------------------------------------------------------------------------
 #
@@ -32,8 +34,6 @@
 # Also available in Ubuntu Hardy: http://packages.ubuntu.com/hardy/python/python-plistlib
 # Or Debian: http://packages.debian.org/sid/python/python-plistlib
 # Current opperation uses temp fiels stored in /tmp to allow multiple tools to use
-# a status output without requerying the server unless the file is older than 5mins (299secs
-# to be exact).
 # You will need to use a username and password of a local admin user on the server to gain access.
 # --------------------------------------------------------------------------
 
@@ -169,7 +169,7 @@ def logMessage(serverMessage, serverAddress, serverPort):
     logFile.flush()
     logFile.close()
 
-def buildDataFile(servermgrdModule, request, server, port, webuser, webpass, debugMode):
+def buildDataFile(servermgrdModule, request, server, port, webuser, webpass, debugMode, reuseTimeout=60):
     now = time.time()
     request_strip = plistlib.Plist.fromFile(StringIO.StringIO(request))
     command = ""
@@ -182,9 +182,9 @@ def buildDataFile(servermgrdModule, request, server, port, webuser, webpass, deb
             logMessage(serverMessage, server, port)
         filemodtime = os.path.getmtime(ServerDataFile)
         differance = now - filemodtime
-        if differance > 300 :
+        if differance > reuseTimeout :
             if debugMode:
-                serverMessage = " DEBUG: DataFile Over 300 Seconds Old -> Getting Fresh Data"
+                serverMessage = " DEBUG: DataFile Over %s Seconds Old -> Getting Fresh Data" % (reuseTimeout)
                 logMessage(serverMessage, server, port)
             createNewDataFile(ServerDataFile, servermgrdModule, request, server, port, webuser, webpass)
     else :

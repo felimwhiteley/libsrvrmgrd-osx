@@ -30,7 +30,7 @@
 
 import pickle, srvrmgrdIO, subprocess, sys, time
 
-__version__ = "0.6.5"
+__version__ = "0.7.0-dev"
 
 configINI = '/etc/libServerManagerDaemon.ini'
 
@@ -79,35 +79,40 @@ if len(sys.argv) > 1:
             listModulesCommands = 1
 
 # Module Configuration
+# Can Be Of Types:
+# NUM : Float Or Int
+# STATE: Running etc.
+# BOOL: 1/0 True/False
+# TIME: Timestamp
 osxServices = {
-    'addressbook' : ['requestsPerHour'],
-    'afp': ['currentConnections'],
-    'backup': [],
-    'calendar': [],
-    'dhcp': ['numDHCPLeases', 'numConfiguredStaticMaps', 'timeOfSnapShot', 'numActiveStaticMaps'],
-    'dirserv': ['timState', 'ldapdState', 'kdcStatus', 'lookupdState', 'passwordServiceState', 'netinfodState', 'netinfodParentState'],
-    'dns': ['zonesAllocated', 'SOAQueriesInProgress', 'transfersRunning', 'transfersDeferred'],
-    'ftp': ['realConnectionCount', 'anonymousAccessPermitted', 'anonymousConnectionCount'],
-    'ipfilter': [],
-    'jabber': ['serviceMode', 'jabberdState', 'mucState', 'proxyState'],
-    'mysql': ['currentConnections', 'currentThroughput'],
-    'nat': ['activeICMP', 'activeTCP', 'activeUDP'],
-    'netboot': [],
-    'nfs': ['nsfd', 'mountd', 'portmap', 'rpc.lockd'],
-    'pcast': ['onlineCameras', 'totalCameras', 'currentJobs', 'totalJobs'],
-    'print': ['currentJobs', 'currentQueues'],
-    'proxy': [],
-    'qtss': ['stateAFP', 'stateDHCP', 'stateHTTP', 'stateNFS', 'stateTFTP'],
-    'radius': [],
-    'sharing': [],
-    'signaler': [],
-    'smb': ['currentConnections'],
-    'swupdate': ['numOfMirroredPkg', 'numOfEnbabledPkg'],
-    'teams': [],
-    'vpn': [],
-    'web': ['apacheState', 'proxyState', 'totalKBytes', 'totalRequests'],
-    'webobjects': [],
-    'xgrid': {'agentStatus': ['status', 'activeCPUPower'], 'controllerStatus': ['status', 'workingCPUPower']}
+    'addressbook' : {'requestsPerHour': "NUM"},
+    'afp': {'currentConnections': "NUM"},
+    'backup': {},
+    'calendar': {},
+    'dhcp': {'numDHCPLeases': "NUM", 'numConfiguredStaticMaps': "NUM", 'timeOfSnapShot': "TIME", 'numActiveStaticMaps': "NUM", 'numDHCPActiveClients': "NUM"},
+    'dirserv': {'timState': "STATE", 'ldapdState': "STATE", 'kdcStatus': "STATE", 'lookupdState': "STATE", 'passwordServiceState': "STATE", 'netinfodState': "STATE", 'netinfodParentState': "STATE"},
+    'dns': {'zonesAllocated': "NUM", 'SOAQueriesInProgress': "NUM", 'transfersRunning': "NUM", 'transfersDeferred': "NUM"},
+    'ftp': {'realConnectionCount': "NUM", 'anonymousAccessPermitted': "BOOL", 'anonymousConnectionCount': "NUM"},
+    'ipfilter': {},
+    'jabber': {'serviceMode': "BOOL", 'jabberdState': "STATE", 'mucState': "STATE", 'proxyState': "STATE"},
+    'mysql': {'currentConnections': "NUM", 'currentThroughput': "NUM"},
+    'nat': {'activeICMP': "NUM", 'activeTCP': "NUM", 'activeUDP': "NUM"},
+    'netboot': {},
+    'nfs': {'nsfd': "STATE", 'mountd': "STATE", 'portmap': "STATE", 'rpc.lockd': "STATE"},
+    'pcast': {'onlineCameras': "NUM", 'totalCameras': "NUM", 'currentJobs': "NUM", 'totalJobs': "NUM"},
+    'print': {'currentJobs': "NUM", 'currentQueues': "NUM"},
+    'proxy': {},
+    'qtss': {'stateAFP': "STATE", 'stateDHCP': "STATE", 'stateHTTP': "STATE", 'stateNFS': "STATE", 'stateTFTP': "STATE"},
+    'radius': {},
+    'sharing': {},
+    'signaler': {},
+    'smb': {'currentConnections': "NUM"},
+    'swupdate': {'numOfMirroredPkg': "NUM", 'numOfEnabledPkg': "NUM"},
+    'teams': {},
+    'vpn': {},
+    'web': {'apacheState': "STATE", 'proxyState': "STATE", 'totalKBytes': "NUM", 'totalRequests': "NUM"},
+    'webobjects': {},
+    'xgrid': {'agentStatus': {'status': "STATE", 'activeCPUPower': "NUM"}, 'controllerStatus': {'status': "STATE", 'workingCPUPower': "NUM"}}
 }
 
 def convertListToCsv(pythonList, sqlMode=0):
@@ -208,6 +213,10 @@ try:
         dataFileMode = int(config.get("config", "dataFileMode"))
     except:
         pass
+    try:
+        reuseTimeout = int(config.get("config", "reuseTimeout"))
+    except:
+        reuseTimeout = 60
     try:
         showDisabledSubServices = int(config.get("config", "showDisabledSubServices"))
     except:
@@ -343,7 +352,7 @@ def getServiceData(servermgrdModule, dataReqCommand, dataReqVariant=None, dataRe
         logMessage(serverMessage, serverAddress, serverPort)
     if dataFileMode:
         # Store Data In /tmp
-        dataFileLocation = srvrmgrdIO.buildDataFile(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword, debugMode)
+        dataFileLocation = srvrmgrdIO.buildDataFile(servermgrdModule, dataRequest, serverAddress, serverPort, serverUser, serverPassword, debugMode, reuseTimeout)
         dataFile = open(dataFileLocation, "rb")
         serviceData = pickle.load(dataFile)
         dataFile.close()
@@ -460,19 +469,18 @@ def xraidStatus(profileData):
     return raidStatus
 
 
-def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore):
+def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore, perfData):
     subServiceStatus = ""
-    # Some Services Use Sub-Arrays Within The PList - We need to handle a Sub-SubService
-    # Effectivly: This is rather ugly and should really change this!
-    if isinstance(subServices, dict):
-        for subServiceName, subServiceArray in subServices.iteritems():
+    for subServiceName, subServiceData in subServices.iteritems():
+        # Dict of Dicts: ie. xgrid
+        if isinstance(subServiceData, dict):
             if subServiceName in serviceData:
                 subServiceInfo = ''
-                for subServiceItem in subServiceArray:
+                for subServiceItemName, subServiceItemType in subServiceData.iteritems():
                     # Default to Showing Sub Services In Output
                     displaySubService = 1
-                    if subServiceItem in serviceData[subServiceName].keys():
-                        subServiceState = serviceData[subServiceName][subServiceItem]
+                    if subServiceItemName in serviceData[subServiceName].keys():
+                        subServiceState = serviceData[subServiceName][subServiceItemName]
                         # Are we tracking Sub Service Warnings For This Sub Service
                         if subServiceName not in subServiceIgnore:
                             # Need to strip out possible float values - This is very hackish
@@ -486,19 +494,19 @@ def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
                                 displaySubService = 0
                         if displaySubService:
                             if subServiceInfo == '':
-                                subServiceInfo = "[%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
+                                subServiceInfo = "[%s%s:%s " % (subServiceInfo, subServiceItemName, serviceData[subServiceName][subServiceItemName])
                             else:
-                                subServiceInfo = "%s%s:%s " % (subServiceInfo, subServiceItem, serviceData[subServiceName][subServiceItem])
+                                subServiceInfo = "%s%s:%s " % (subServiceInfo, subServiceItemName, serviceData[subServiceName][subServiceItemName])
+                            if subServiceItemType == "NUM":
+                                    perfData += "%s.%s=%s;;;;; " % (subServiceName, subServiceItemName, serviceData[subServiceName][subServiceItemName])
                 if subServiceInfo != '':
                     subServiceStatus = "%s%s:%s] " % (subServiceStatus, subServiceName, subServiceInfo.rstrip())
-    # Normal Sub-Services
-    else:
-        for subService in subServices:
+        else:
             # Default to Showing Sub Services In Output
             displaySubService = 1
-            if subService in serviceData:
-                subServiceState = serviceData[subService]
-                if subService not in subServiceIgnore:
+            if subServiceName in serviceData:
+                subServiceState = serviceData[subServiceName]
+                if subServiceName not in subServiceIgnore:
                     # Need to strip out possible float values - This is very hackish
                     if not str(subServiceState).replace('.', '').isdigit():
                         if subServiceState.upper() in ('STOPPED', 'OFF'):
@@ -509,8 +517,10 @@ def getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
                     if not showDisabledSubServices:
                         displaySubService = 0
                 if displaySubService:
-                    subServiceStatus = "%s%s:%s " % (subServiceStatus, subService, subServiceState)
-    return subServiceStatus, warningCount
+                    subServiceStatus = "%s%s:%s " % (subServiceStatus, subServiceName, subServiceState)
+                    if subServiceData == "NUM":
+                        perfData += "%s=%s;;;;; " % (subServiceName, subServiceState)
+    return subServiceStatus, warningCount, perfData
 
 
 def convertToBytes(humanisedBytes):
@@ -808,7 +818,7 @@ elif checkService in osxServices:
     if not criticalCount:
         # Not All Services Have Sub-Services
         if len(subServices) > 0:
-            subServiceStatus, warningCount = getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore)
+            subServiceStatus, warningCount, perfData = getSubServiceState(warningCount, subServices, serviceData, subServiceIgnore, perfData)
             # Some services have sub-services that are not always there
             # if they are there then return the sub-services-status instead
             if subServiceStatus not in (None, ''):
