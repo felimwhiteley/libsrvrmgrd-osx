@@ -155,7 +155,12 @@ def sendXML(servermgrdModule, request, server, port, webuser, webpass):
         print "ERROR: Problem Contacting Server:%s" % (xmlresult)
         sys.exit(2)
     xmlFauxFile = StringIO.StringIO(xmlresult)
-    return plistlib.Plist.fromFile(xmlFauxFile)
+    try:
+        return plistlib.Plist.fromFile(xmlFauxFile)
+    except:
+        # DHCP Is returning invalid XML characters in the clientID field for some hosts
+        print "ERROR: ParserError:%s" % (sys.exc_info()[1])
+        sys.exit(2)
 
 def getServerDataFilename(server, port, servermgrdModule, command):
     serverDataFile = "/tmp/%s_%s_%s_%s.dat" % (server, port, servermgrdModule, command)
