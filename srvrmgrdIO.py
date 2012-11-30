@@ -48,6 +48,9 @@ import urllib2
 import base64
 import pickle
 
+# OSX Doesn't Negotiate TLS Properly & later versionsof SSL dropped TLSv1 by default
+TLS_V1_NEG_ERROR = 1
+
 # buildXML creates an xml request for a servermgrd module.
 # ** command is the name of the command to put in the request
 # e.g. getHistory
@@ -119,10 +122,24 @@ def buildXML ( command, variant=None, timescale=None, identifier=None, offset=No
 </plist>"""
     return request
 
+def httpsConnectReplacment(self):
+    """Replacement for broken clients https connect using non v1 connections"""
+    import socket, ssl
+    sock = socket.create_connection((self.host, self.port),
+                                    self.timeout, self.source_address)
+    if self._tunnel_host:
+        self.sock = sock
+        self._tunnel()
+    self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_TLSv1)
+
+
 # This code enables a connection to the server via BASIC AUTH over https
 # The user must be an admin on the Mac Server
 
 def requestServerData(url, webuser = None, webpass = None):
+    if TLS_V1_NEG_ERROR:
+        import httplib
+        httplib.HTTPSConnection.connect = httpsConnectReplacment
     from urllib2 import (HTTPPasswordMgr, HTTPBasicAuthHandler, build_opener, install_opener, urlopen, HTTPError)
     password_mgr = HTTPPasswordMgr()	#WithDefaultRealm()
     password_mgr.add_password("Server Admin", url, webuser, webpass)
@@ -216,7 +233,7 @@ def buildDataFile(servermgrdModule, request, server, port, webuser, webpass, deb
         createNewDataFile(ServerDataFile, servermgrdModule, request, server, port, webuser, webpass)
     return ServerDataFile
 
-def createNewDataFile ( ServerDataFile, servermgrdModule, request, server, port, webuser, webpass ) :
+def createNewDataFile(ServerDataFile, servermgrdModule, request, server, port, webuser, webpass) :
     DataPList = sendXML(servermgrdModule, request, server, port, webuser, webpass)
     fout = open(ServerDataFile, "wb")
     pickle.dump(DataPList, fout, 2)
