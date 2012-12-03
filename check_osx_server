@@ -783,6 +783,9 @@ elif checkService == "xserveraid":
             batteryState = raidStatus['Battery Info']['State']
             if batteryState != 'Working battery':
                 criticalCount += 1
+            elif raidStatus['Battery Info']['Status']['Conditioning'] == "Yes":
+                warningCount += 1
+                batteryState = "Conditioning"
             serviceStatus += "Battery:'%s' " % (batteryState)
         if 'RAID Sets' in raidStatus.keys():
             for raidSet, raidSetInfo in raidStatus['RAID Sets'].iteritems():
