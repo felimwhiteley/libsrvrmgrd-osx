@@ -89,6 +89,7 @@ osxServices = {
     'afp': {'currentConnections': "NUM"},
     'backup': {},
     'calendar': {},
+    'devicemgr': {},
     'dhcp': {'numDHCPLeases': "NUM", 'numConfiguredStaticMaps': "NUM", 'timeOfSnapShot': "TIME", 'numActiveStaticMaps': "NUM", 'numDHCPActiveClients': "NUM"},
     'dirserv': {'timState': "STATE", 'ldapdState': "STATE", 'kdcStatus': "STATE", 'lookupdState': "STATE", 'passwordServiceState': "STATE", 'netinfodState': "STATE", 'netinfodParentState': "STATE"},
     'dns': {'zonesAllocated': "NUM", 'SOAQueriesInProgress': "NUM", 'transfersRunning': "NUM", 'transfersDeferred': "NUM"},
@@ -110,6 +111,7 @@ osxServices = {
     'swupdate': {'numOfMirroredPkg': "NUM", 'numOfEnabledPkg': "NUM"},
     'teams': {},
     'vpn': {},
+    'wiki': {'countOfActiveUsers': "NUM"},
     'web': {'apacheState': "STATE", 'proxyState': "STATE", 'totalKBytes': "NUM", 'totalRequests': "NUM"},
     'webobjects': {},
     'xgrid': {'agentStatus': {'status': "STATE", 'activeCPUPower': "NUM"}, 'controllerStatus': {'status': "STATE", 'workingCPUPower': "NUM"}}
